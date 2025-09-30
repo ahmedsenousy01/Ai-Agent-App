@@ -1,8 +1,5 @@
 // App configuration
 export const appConfig = {
-  // API Keys (in production, these would come from environment variables)
-  googleGeminiApiKey: process.env.GOOGLE_GEMINI_API_KEY || "mock-api-key",
-
   // App settings
   environment: process.env.APP_ENV || "development",
   debugMode: process.env.DEBUG_MODE === "true" || true,

@@ -66,13 +66,27 @@ export default function App() {
   // Initialize the app
   useEffect(() => {
     const initializeApp = async () => {
+      console.log("🟪 [App] Initializing app...");
+      console.log("🟪 [App] Note: API keys are handled server-side only");
+
       try {
-        // Initialize the AI agent with API key from config
-        initializeAgent(appConfig.googleGeminiApiKey);
+        // Initialize the AI agent (no API key needed in mobile app)
+        console.log("🟪 [App] Calling initializeAgent...");
+        initializeAgent(); // No API key parameter needed
+        console.log("🟪 [App] Agent initialized successfully");
         setIsInitialized(true);
+        console.log("🟪 [App] App initialization completed");
       } catch (error) {
-        console.error("Failed to initialize app:", error);
+        console.error("🟪 [App] Failed to initialize app:", error);
+        console.error("🟪 [App] Error details:", {
+          name: error instanceof Error ? error.name : "Unknown",
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         setIsInitialized(true); // Still allow the app to run
+        console.log(
+          "🟪 [App] App initialization completed with error (continuing anyway)"
+        );
       }
     };
 
@@ -123,26 +137,51 @@ export default function App() {
   }, [sidebarOpen]);
 
   const processVoiceCommand = async (recordingTime: number) => {
+    console.log(
+      "🟪 [App] processVoiceCommand - Starting voice command processing"
+    );
+    console.log("🟪 [App] Recording time:", recordingTime);
+    console.log("🟪 [App] App initialized:", isInitialized);
+    console.log("🟪 [App] Current page:", currentPage);
+    console.log("🟪 [App] Selected patient:", selectedPatient?.id);
+    console.log("🟪 [App] Editing report:", editingReport?.id);
+
     if (!isInitialized) {
+      console.log("🟪 [App] App not initialized, setting status");
       setCurrentStatus("App not initialized yet");
       return;
     }
 
     setState("processing");
     setCurrentStatus("Processing voice command...");
+    console.log("🟪 [App] State set to processing");
 
     try {
       // Get app context
+      console.log("🟪 [App] Getting app context...");
       const context: AppContext = dataStore.getAppContext(
         currentPage,
         selectedPatient?.id,
         editingReport?.id
       );
+      console.log("🟪 [App] App context obtained:", {
+        currentScreen: context.currentScreen,
+        currentPatient: context.currentPatient?.id,
+        currentReport: context.currentReport?.id,
+      });
 
       // Get the actual audio recording
+      console.log("🟪 [App] Stopping recording to get audio result...");
       const audioResult = await voiceService.stopRecording();
+      console.log("🟪 [App] Audio result received:", {
+        hasResult: !!audioResult,
+        hasUri: !!audioResult?.uri,
+        hasBlob: !!audioResult?.blob,
+        uri: audioResult?.uri,
+      });
 
       if (!audioResult) {
+        console.error("🟪 [App] No audio recording available");
         throw new Error("No audio recording available");
       }
 
@@ -151,10 +190,25 @@ export default function App() {
         uri: audioResult.uri,
         blob: audioResult.blob,
       };
+      console.log("🟪 [App] AudioData object created:", {
+        hasUri: !!audioData.uri,
+        hasBlob: !!audioData.blob,
+        uri: audioData.uri,
+      });
 
+      console.log("🟪 [App] Calling voiceService.processAudio...");
       const result = await voiceService.processAudio(audioData, context);
+      console.log("🟪 [App] Voice service processing completed:", {
+        success: result.success,
+        status: result.status,
+        toolCallsCount: result.toolCalls?.length || 0,
+        hasSummary: !!result.summary,
+        hasError: !!result.error,
+        summary: result.summary?.substring(0, 100) + "...",
+      });
 
       if (result.success) {
+        console.log("🟪 [App] Processing successful, setting UI state");
         setCurrentStatus("Task completed");
         setProcessedTask(result.summary);
 
@@ -172,6 +226,7 @@ export default function App() {
           }, 2000);
         }, 1200);
       } else {
+        console.log("🟪 [App] Processing failed, setting error state");
         setCurrentStatus("Error processing command");
         setProcessedTask(result.error || "Unknown error occurred");
 
@@ -182,7 +237,13 @@ export default function App() {
         }, 3000);
       }
     } catch (error) {
-      console.error("Voice processing error:", error);
+      console.error("🟪 [App] Voice processing error:", error);
+      console.error("🟪 [App] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
       setCurrentStatus("Error processing command");
       setProcessedTask("Failed to process voice command");
 

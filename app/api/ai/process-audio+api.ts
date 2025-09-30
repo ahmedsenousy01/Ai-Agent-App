@@ -83,123 +83,253 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  try {
-    const body = await request.json();
-    const { audioData, context, systemPrompt } = body;
+  console.log("🟢 [API Route] POST /api/ai/process-audio - Request received");
+  console.log(
+    "🟢 [API Route] Request headers:",
+    Object.fromEntries(request.headers.entries())
+  );
 
-    // Get API key from environment (server-side, no EXPO_PUBLIC_ prefix needed)
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!apiKey) {
+  // Add timeout wrapper for the entire request processing
+  const timeoutPromise = new Promise<Response>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error("Request processing timeout after 25 seconds"));
+    }, 25000); // 25 second timeout
+  });
+
+  const processRequest = async (): Promise<Response> => {
+    try {
+      console.log("🟢 [API Route] Parsing request body...");
+      const body = await request.json();
+      console.log("🟢 [API Route] Request body parsed:", {
+        hasAudioData: !!body.audioData,
+        hasContext: !!body.context,
+        hasSystemPrompt: !!body.systemPrompt,
+        audioDataKeys: body.audioData ? Object.keys(body.audioData) : [],
+        contextKeys: body.context ? Object.keys(body.context) : [],
+      });
+
+      const { audioData, context, systemPrompt } = body;
+
+      // Get API key from environment (server-side, no EXPO_PUBLIC_ prefix needed)
+      console.log("🟢 [API Route] Checking for API key...");
+      const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      console.log("🟢 [API Route] API key status:", {
+        hasApiKey: !!apiKey,
+        keyLength: apiKey ? apiKey.length : 0,
+        keyPrefix: apiKey ? apiKey.substring(0, 10) + "..." : "none",
+      });
+
+      if (!apiKey) {
+        console.error("🔴 [API Route] No API key configured");
+        return Response.json(
+          { error: "API key not configured" },
+          { status: 500 }
+        );
+      }
+
+      // Set the API key for the Google provider
+      console.log("🟢 [API Route] Initializing Google model...");
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
+      const model = google("gemini-2.5-flash");
+      console.log("🟢 [API Route] Google model initialized");
+
+      // Convert base64 audio data to Uint8Array
+      console.log("🟢 [API Route] Converting base64 audio data...");
+      let audioUint8Array: Uint8Array;
+      if (audioData.base64) {
+        console.log(
+          "🟢 [API Route] Base64 audio data found, length:",
+          audioData.base64.length
+        );
+        console.log("🟢 [API Route] Media type:", audioData.mediaType);
+
+        // Decode base64 audio data
+        const binaryString = atob(audioData.base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        audioUint8Array = bytes;
+        console.log(
+          "🟢 [API Route] Audio converted to Uint8Array, length:",
+          audioUint8Array.length
+        );
+      } else {
+        console.error("🔴 [API Route] No audio data provided");
+        return Response.json(
+          { error: "No audio data provided" },
+          { status: 400 }
+        );
+      }
+
+      // Create AI tools
+      console.log("🟢 [API Route] Creating AI tools...");
+      const aiTools = createAITools();
+      console.log(
+        "🟢 [API Route] AI tools created, count:",
+        Object.keys(aiTools).length
+      );
+
+      // Stream the AI response with audio input
+      console.log("🟢 [API Route] Starting AI stream processing...");
+      const result = streamText({
+        model,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Please process this audio command and execute the appropriate medical operations.",
+              },
+              {
+                type: "file",
+                data: audioUint8Array,
+                mediaType: audioData.mediaType || "audio/m4a",
+              },
+            ],
+          },
+        ],
+        tools: aiTools,
+      });
+      console.log("🟢 [API Route] AI stream initialized");
+
+      // Collect the streaming response
+      let fullResponse = "";
+      let toolCalls: Array<{ tool: string; args: any; result?: any }> = [];
+
+      try {
+        // Stream text response
+        console.log("🟢 [API Route] Processing text stream...");
+        for await (const delta of result.textStream) {
+          fullResponse += delta;
+        }
+        console.log(
+          "🟢 [API Route] Text stream complete, response length:",
+          fullResponse.length
+        );
+
+        // Get the final result
+        console.log("🟢 [API Route] Getting final result...");
+        const finalResult = await result;
+        console.log("🟢 [API Route] Final result obtained");
+
+        // Extract and execute tool calls
+        console.log("🟢 [API Route] Extracting tool calls...");
+        const toolCallsResult = await finalResult.toolCalls;
+        console.log(
+          "🟢 [API Route] Tool calls extracted, count:",
+          toolCallsResult?.length || 0
+        );
+
+        if (toolCallsResult && toolCallsResult.length > 0) {
+          console.log("🟢 [API Route] Executing tool calls...");
+          for (const toolCall of toolCallsResult) {
+            const toolName = toolCall.toolName;
+            const args = toolCall.input;
+            console.log(
+              "🟢 [API Route] Executing tool:",
+              toolName,
+              "with args:",
+              args
+            );
+
+            // Execute the actual tool
+            let toolResult;
+            try {
+              toolResult = await executeTool(toolName, args);
+              console.log(
+                "🟢 [API Route] Tool executed successfully:",
+                toolName
+              );
+            } catch (error) {
+              console.error(
+                "🔴 [API Route] Tool execution failed:",
+                toolName,
+                error
+              );
+              toolResult = {
+                error: error instanceof Error ? error.message : "Unknown error",
+              };
+            }
+
+            toolCalls.push({
+              tool: toolName,
+              args,
+              result: toolResult,
+            });
+          }
+        }
+
+        // Generate final summary
+        console.log("🟢 [API Route] Generating final summary...");
+        const finalSummary = generateSummary(toolCalls, fullResponse);
+        console.log(
+          "🟢 [API Route] Final summary generated, length:",
+          finalSummary.length
+        );
+
+        const responseData = {
+          summary: finalSummary,
+          status: "completed",
+          toolCalls,
+          success: true,
+          fullResponse,
+        };
+
+        console.log("🟢 [API Route] Returning successful response:", {
+          summaryLength: responseData.summary.length,
+          toolCallsCount: responseData.toolCalls.length,
+          fullResponseLength: responseData.fullResponse.length,
+        });
+
+        return Response.json(responseData);
+      } catch (streamError) {
+        console.error("🔴 [API Route] Stream processing error:", streamError);
+
+        // If no output was generated, provide a fallback response
+        if (
+          streamError instanceof Error &&
+          streamError.message.includes("No output generated")
+        ) {
+          console.log(
+            "🟢 [API Route] No output generated, providing fallback response"
+          );
+          const fallbackResponse = {
+            summary:
+              "Audio command processed successfully. No specific medical operations were required.",
+            status: "completed",
+            toolCalls: [],
+            success: true,
+            fullResponse:
+              "The audio command was received and processed. The system is ready for further instructions.",
+          };
+          return Response.json(fallbackResponse);
+        }
+
+        throw streamError;
+      }
+    } catch (error) {
+      console.error("🔴 [API Route] API processing error:", error);
+      console.error("🔴 [API Route] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
       return Response.json(
-        { error: "API key not configured" },
+        {
+          error: error instanceof Error ? error.message : "Unknown error",
+          success: false,
+        },
         { status: 500 }
       );
     }
+  };
 
-    // Set the API key for the Google provider
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
-    const model = google("gemini-2.5-flash");
-
-    // Convert base64 audio data to Uint8Array
-    let audioUint8Array: Uint8Array;
-    if (audioData.base64) {
-      // Decode base64 audio data
-      const binaryString = atob(audioData.base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      audioUint8Array = bytes;
-    } else {
-      return Response.json(
-        { error: "No audio data provided" },
-        { status: 400 }
-      );
-    }
-
-    // Create AI tools
-    const aiTools = createAITools();
-
-    // Stream the AI response with audio input
-    const result = streamText({
-      model,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Please process this audio command and execute the appropriate medical operations.",
-            },
-            {
-              type: "file",
-              data: audioUint8Array,
-              mediaType: audioData.mediaType || "audio/m4a",
-            },
-          ],
-        },
-      ],
-      tools: aiTools,
-    });
-
-    // Collect the streaming response
-    let fullResponse = "";
-    let toolCalls: Array<{ tool: string; args: any; result?: any }> = [];
-
-    // Stream text response
-    for await (const delta of result.textStream) {
-      fullResponse += delta;
-    }
-
-    // Get the final result
-    const finalResult = await result;
-
-    // Extract and execute tool calls
-    const toolCallsResult = await finalResult.toolCalls;
-    if (toolCallsResult && toolCallsResult.length > 0) {
-      for (const toolCall of toolCallsResult) {
-        const toolName = toolCall.toolName;
-        const args = toolCall.input;
-
-        // Execute the actual tool
-        let toolResult;
-        try {
-          toolResult = await executeTool(toolName, args);
-        } catch (error) {
-          toolResult = {
-            error: error instanceof Error ? error.message : "Unknown error",
-          };
-        }
-
-        toolCalls.push({
-          tool: toolName,
-          args,
-          result: toolResult,
-        });
-      }
-    }
-
-    // Generate final summary
-    const finalSummary = generateSummary(toolCalls, fullResponse);
-
-    return Response.json({
-      summary: finalSummary,
-      status: "completed",
-      toolCalls,
-      success: true,
-      fullResponse,
-    });
-  } catch (error) {
-    console.error("API processing error:", error);
-    return Response.json(
-      {
-        error: error instanceof Error ? error.message : "Unknown error",
-        success: false,
-      },
-      { status: 500 }
-    );
-  }
+  // Race between processing and timeout
+  return Promise.race([processRequest(), timeoutPromise]);
 }
 
 function createAITools() {

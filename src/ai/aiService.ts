@@ -1,4 +1,3 @@
-import { google } from "@ai-sdk/google";
 import { streamText, tool } from "ai";
 import { z } from "zod";
 import { medicalTools } from "./tools";
@@ -13,19 +12,39 @@ import {
 export class AIService {
   private model: any;
   private isProcessing = false;
-  constructor(apiKey?: string) {
-    // Set the API key as environment variable for the Google provider
-    if (apiKey && apiKey !== "mock-api-key") {
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
-    }
-    this.model = google("gemini-2.5-flash");
+  constructor() {
+    console.log(
+      "🟡 [AIService] Constructor called (API keys handled server-side)"
+    );
+    console.log(
+      "🟡 [AIService] Note: This service is for client-side use only"
+    );
+    console.log("🟡 [AIService] Actual AI processing happens in API route");
   }
 
   async processAudio(
     audioData: AudioData,
     context: AppContext
   ): Promise<VoiceServiceResponse> {
+    console.log(
+      "🟡 [AIService] Starting processAudio (delegating to API service)"
+    );
+    console.log("🟡 [AIService] Audio data received:", {
+      hasData: !!audioData.data,
+      hasBlob: !!audioData.blob,
+      hasUri: !!audioData.uri,
+      dataLength: audioData.data?.length,
+      blobType: audioData.blob?.type,
+      uri: audioData.uri,
+    });
+    console.log("🟡 [AIService] Context received:", {
+      currentScreen: context.currentScreen,
+      currentPatient: context.currentPatient?.id,
+      currentReport: context.currentReport?.id,
+    });
+
     if (this.isProcessing) {
+      console.log("🟡 [AIService] Already processing, returning busy status");
       return {
         summary: "Already processing a request. Please wait.",
         status: "busy",
@@ -36,19 +55,37 @@ export class AIService {
     }
 
     this.isProcessing = true;
+    console.log("🟡 [AIService] Set processing flag to true");
 
     try {
       // Validate audio data
+      console.log("🟡 [AIService] Validating audio data...");
       if (!validateAudioData(audioData)) {
+        console.error("🔴 [AIService] Audio data validation failed");
         throw new Error("Invalid audio data provided");
       }
+      console.log("🟡 [AIService] Audio data validation passed");
 
-      // Process audio directly with Gemini (no STT layer needed)
-      const result = await this.processAudioDirectly(audioData, context);
+      // Delegate to API service (which handles the actual AI processing)
+      console.log("🟡 [AIService] Delegating to API service...");
+      const { apiService } = require("../services/apiService");
+      const result = await apiService.processAudio(audioData, context);
+      console.log("🟡 [AIService] API service processing completed:", {
+        success: result.success,
+        status: result.status,
+        toolCallsCount: result.toolCalls?.length || 0,
+        hasSummary: !!result.summary,
+      });
 
       return result;
     } catch (error) {
-      console.error("AI processing error:", error);
+      console.error("🔴 [AIService] AI processing error:", error);
+      console.error("🔴 [AIService] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
       return {
         summary:
           "I encountered an error processing your request. Please try again.",
@@ -59,6 +96,7 @@ export class AIService {
       };
     } finally {
       this.isProcessing = false;
+      console.log("🟡 [AIService] Set processing flag to false");
     }
   }
 
@@ -66,18 +104,39 @@ export class AIService {
     audioData: AudioData,
     context: AppContext
   ): Promise<VoiceServiceResponse> {
+    console.log(
+      "🟡 [AIService] processAudioDirectly - Starting direct processing"
+    );
     try {
       // Create AI tools from our medical tools
+      console.log("🟡 [AIService] Creating AI tools...");
       const aiTools = this.createAITools();
+      console.log(
+        "🟡 [AIService] AI tools created, count:",
+        Object.keys(aiTools).length
+      );
 
       // Get contextual prompt
+      console.log("🟡 [AIService] Getting system prompt...");
       const systemPrompt = this.getSystemPrompt(context);
+      console.log(
+        "🟡 [AIService] System prompt created, length:",
+        systemPrompt.length
+      );
 
       // Convert audio data to Uint8Array for Gemini
+      console.log("🟡 [AIService] Converting audio data...");
       const audioUint8Array = await convertAudioToUint8Array(audioData);
       const mediaType = getAudioMediaType(audioData);
+      console.log(
+        "🟡 [AIService] Audio converted, length:",
+        audioUint8Array.length,
+        "type:",
+        mediaType
+      );
 
       // Stream the AI response with audio input
+      console.log("🟡 [AIService] Starting AI stream...");
       const result = streamText({
         model: this.model,
         system: systemPrompt,
@@ -99,31 +158,58 @@ export class AIService {
         ],
         tools: aiTools,
       });
+      console.log("🟡 [AIService] AI stream initialized");
 
       // Collect the streaming response
       let fullResponse = "";
       let toolCalls: Array<{ tool: string; args: any; result?: any }> = [];
       let finalSummary = "";
 
+      console.log("🟡 [AIService] Processing text stream...");
       for await (const delta of result.textStream) {
         fullResponse += delta;
       }
+      console.log(
+        "🟡 [AIService] Text stream complete, response length:",
+        fullResponse.length
+      );
 
       // Get the final result
+      console.log("🟡 [AIService] Getting final result...");
       const finalResult = await result;
+      console.log("🟡 [AIService] Final result obtained");
 
       // Extract tool calls from the result
+      console.log("🟡 [AIService] Extracting tool calls...");
       const toolCallsResult = await finalResult.toolCalls;
+      console.log(
+        "🟡 [AIService] Tool calls extracted, count:",
+        toolCallsResult?.length || 0
+      );
+
       if (toolCallsResult && toolCallsResult.length > 0) {
+        console.log("🟡 [AIService] Executing tool calls...");
         for (const toolCall of toolCallsResult) {
           const toolName = toolCall.toolName;
           const args = toolCall.input;
+          console.log(
+            "🟡 [AIService] Executing tool:",
+            toolName,
+            "with args:",
+            args
+          );
 
           // Execute the actual tool
           let toolResult;
           try {
             toolResult = await this.executeTool(toolName, args);
+            console.log("🟡 [AIService] Tool executed successfully:", toolName);
           } catch (error) {
+            console.error(
+              "🔴 [AIService] Tool execution failed:",
+              toolName,
+              error
+            );
             toolResult = {
               error: error instanceof Error ? error.message : "Unknown error",
             };
@@ -138,16 +224,36 @@ export class AIService {
       }
 
       // Generate final summary
+      console.log("🟡 [AIService] Generating final summary...");
       finalSummary = this.generateSummary(toolCalls, fullResponse);
+      console.log(
+        "🟡 [AIService] Final summary generated, length:",
+        finalSummary.length
+      );
 
-      return {
+      const finalResponse = {
         summary: finalSummary,
         status: "completed",
         toolCalls,
         success: true,
       };
+
+      console.log("🟡 [AIService] Returning successful response:", {
+        summaryLength: finalResponse.summary.length,
+        toolCallsCount: finalResponse.toolCalls.length,
+      });
+
+      return finalResponse;
     } catch (error) {
-      console.error("AI processing error:", error);
+      console.error(
+        "🔴 [AIService] AI processing error in processAudioDirectly:",
+        error
+      );
+      console.error("🔴 [AIService] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }
@@ -485,8 +591,12 @@ Remember: You are working with real medical data, so accuracy and safety are par
 // Export singleton instance
 export let aiService: AIService | null = null;
 
-export const initializeAIService = (apiKey?: string): AIService => {
-  aiService = new AIService(apiKey);
+export const initializeAIService = (): AIService => {
+  console.log("🟡 [AIService] Initializing AIService (client-side only)");
+
+  aiService = new AIService();
+  console.log("🟡 [AIService] AIService instance created successfully");
+
   return aiService;
 };
 

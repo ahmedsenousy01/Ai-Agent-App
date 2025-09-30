@@ -4,16 +4,25 @@ import { getAIService } from "./aiService";
 import { AudioData } from "../utils/audioUtils";
 
 export class MedicalAIAgent {
-  private apiKey: string;
-
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
-  }
-
   async processAudio(
     audioData: AudioData,
     context: AppContext
   ): Promise<VoiceServiceResponse> {
+    console.log("🟣 [MedicalAIAgent] Starting processAudio");
+    console.log("🟣 [MedicalAIAgent] Audio data received:", {
+      hasData: !!audioData.data,
+      hasBlob: !!audioData.blob,
+      hasUri: !!audioData.uri,
+      dataLength: audioData.data?.length,
+      blobType: audioData.blob?.type,
+      uri: audioData.uri,
+    });
+    console.log("🟣 [MedicalAIAgent] Context received:", {
+      currentScreen: context.currentScreen,
+      currentPatient: context.currentPatient?.id,
+      currentReport: context.currentReport?.id,
+    });
+
     const startTime = new Date().toISOString();
     const interactionLog: Omit<InteractionLog, "id"> = {
       startedAt: startTime,
@@ -25,11 +34,27 @@ export class MedicalAIAgent {
       },
       success: false,
     };
+    console.log("🟣 [MedicalAIAgent] Interaction log initialized:", {
+      startedAt: interactionLog.startedAt,
+      context: interactionLog.context,
+    });
 
     try {
       // Use the real AI service instead of mock responses
+      console.log("🟣 [MedicalAIAgent] Getting AI service...");
       const aiService = getAIService();
+      console.log(
+        "🟣 [MedicalAIAgent] AI service obtained, calling processAudio..."
+      );
+
       const result = await aiService.processAudio(audioData, context);
+      console.log("🟣 [MedicalAIAgent] AI service processing completed:", {
+        success: result.success,
+        status: result.status,
+        toolCallsCount: result.toolCalls?.length || 0,
+        hasSummary: !!result.summary,
+        hasError: !!result.error,
+      });
 
       // Update interaction log
       interactionLog.finishedAt = new Date().toISOString();
@@ -45,14 +70,35 @@ export class MedicalAIAgent {
 
       if (!result.success && result.error) {
         interactionLog.error = result.error;
+        console.log(
+          "🟣 [MedicalAIAgent] Error recorded in interaction log:",
+          result.error
+        );
       }
 
-      // Save interaction log
-      dataStore.addInteractionLog(interactionLog);
+      console.log("🟣 [MedicalAIAgent] Interaction log updated:", {
+        finishedAt: interactionLog.finishedAt,
+        intent: interactionLog.intent,
+        success: interactionLog.success,
+        toolCallsCount: interactionLog.toolCalls?.length || 0,
+      });
 
+      // Save interaction log
+      console.log(
+        "🟣 [MedicalAIAgent] Saving interaction log to data store..."
+      );
+      dataStore.addInteractionLog(interactionLog);
+      console.log("🟣 [MedicalAIAgent] Interaction log saved successfully");
+
+      console.log("🟣 [MedicalAIAgent] Returning successful result");
       return result;
     } catch (error) {
-      console.error("AI processing error:", error);
+      console.error("🔴 [MedicalAIAgent] AI processing error:", error);
+      console.error("🔴 [MedicalAIAgent] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
       // Update interaction log with error
       interactionLog.finishedAt = new Date().toISOString();
@@ -60,10 +106,22 @@ export class MedicalAIAgent {
         error instanceof Error ? error.message : "Unknown error";
       interactionLog.success = false;
 
-      // Save interaction log
-      dataStore.addInteractionLog(interactionLog);
+      console.log("🟣 [MedicalAIAgent] Error interaction log updated:", {
+        finishedAt: interactionLog.finishedAt,
+        error: interactionLog.error,
+        success: interactionLog.success,
+      });
 
-      return {
+      // Save interaction log
+      console.log(
+        "🟣 [MedicalAIAgent] Saving error interaction log to data store..."
+      );
+      dataStore.addInteractionLog(interactionLog);
+      console.log(
+        "🟣 [MedicalAIAgent] Error interaction log saved successfully"
+      );
+
+      const errorResponse = {
         summary:
           "I encountered an error processing your request. Please try again.",
         status: "error",
@@ -71,6 +129,9 @@ export class MedicalAIAgent {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       };
+
+      console.log("🟣 [MedicalAIAgent] Returning error response");
+      return errorResponse;
     }
   }
 
@@ -119,15 +180,30 @@ export class MedicalAIAgent {
 // Export singleton instance (will be initialized with API key)
 export let medicalAgent: MedicalAIAgent | null = null;
 
-export const initializeAgent = (apiKey?: string): MedicalAIAgent => {
+export const initializeAgent = (): MedicalAIAgent => {
+  console.log(
+    "🟣 [MedicalAIAgent] Initializing agent (API keys handled server-side)"
+  );
+
   // Initialize AI services first
+  console.log("🟣 [MedicalAIAgent] Initializing AI services...");
   const { initializeAIService } = require("./aiService");
   const { initializeStreamingAIService } = require("./streamingAIService");
 
-  initializeAIService(apiKey);
-  initializeStreamingAIService(apiKey);
+  console.log("🟣 [MedicalAIAgent] Initializing AIService...");
+  initializeAIService(); // No API key needed in mobile app
+  console.log("🟣 [MedicalAIAgent] AIService initialized");
 
-  medicalAgent = new MedicalAIAgent(apiKey || "mock-api-key");
+  console.log("🟣 [MedicalAIAgent] Initializing StreamingAIService...");
+  initializeStreamingAIService(); // No API key needed in mobile app
+  console.log("🟣 [MedicalAIAgent] StreamingAIService initialized");
+
+  console.log("🟣 [MedicalAIAgent] Creating MedicalAIAgent instance...");
+  medicalAgent = new MedicalAIAgent(); // No API key needed in mobile app
+  console.log(
+    "🟣 [MedicalAIAgent] MedicalAIAgent instance created successfully"
+  );
+
   return medicalAgent;
 };
 

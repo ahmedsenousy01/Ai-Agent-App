@@ -1,15 +1,35 @@
 import { AudioData } from "../utils/audioUtils";
 import { AppContext, VoiceServiceResponse } from "../types";
+import Constants from "expo-constants";
 
 export class APIService {
   private static instance: APIService;
   private baseUrl: string;
 
   private constructor() {
-    // Use the Expo API route
-    this.baseUrl = __DEV__
-      ? "http://192.168.1.109:8081" // Expo dev server (updated port)
-      : "https://your-production-api.com"; // Replace with your production URL
+    // Use the Expo API route - get the correct IP from Expo
+    // For mobile devices, we need to use the network IP, not localhost
+    if (__DEV__) {
+      // Try to get the development server URL from Expo constants
+      const expoServerUrl = Constants.expoConfig?.hostUri;
+      console.log("🔵 [APIService] Expo hostUri:", expoServerUrl);
+
+      if (expoServerUrl) {
+        this.baseUrl = `http://${expoServerUrl}`;
+        console.log(
+          "🔵 [APIService] Using Expo hostUri for baseUrl:",
+          this.baseUrl
+        );
+      } else {
+        // Fallback to the IP from the logs
+        this.baseUrl = "http://192.168.8.109:8081";
+        console.log("🔵 [APIService] Using fallback baseUrl:", this.baseUrl);
+      }
+    } else {
+      this.baseUrl = "https://your-production-api.com"; // Replace with your production URL
+    }
+
+    console.log("🔵 [APIService] Final baseUrl:", this.baseUrl);
   }
 
   static getInstance(): APIService {
@@ -23,54 +43,160 @@ export class APIService {
     audioData: AudioData,
     context: AppContext
   ): Promise<VoiceServiceResponse> {
+    console.log("🔵 [APIService] Starting processAudio");
+    console.log("🔵 [APIService] Audio data received:", {
+      hasData: !!audioData.data,
+      hasBlob: !!audioData.blob,
+      hasUri: !!audioData.uri,
+      dataLength: audioData.data?.length,
+      blobType: audioData.blob?.type,
+      uri: audioData.uri,
+    });
+    console.log("🔵 [APIService] Context received:", {
+      currentScreen: context.currentScreen,
+      currentPatient: context.currentPatient?.id,
+      currentReport: context.currentReport?.id,
+    });
+
     try {
       // Convert audio data to base64 for API transmission
+      console.log("🔵 [APIService] Converting audio to Uint8Array...");
       const audioUint8Array = await this.convertAudioToUint8Array(audioData);
+      console.log(
+        "🔵 [APIService] Audio converted to Uint8Array, length:",
+        audioUint8Array.length
+      );
+
+      console.log("🔵 [APIService] Converting to base64...");
       const base64Audio = this.uint8ArrayToBase64(audioUint8Array);
+      console.log(
+        "🔵 [APIService] Base64 conversion complete, length:",
+        base64Audio.length
+      );
+
       const mediaType = this.getAudioMediaType(audioData);
+      console.log("🔵 [APIService] Detected media type:", mediaType);
 
       // Create system prompt
+      console.log("🔵 [APIService] Creating system prompt...");
       const systemPrompt = this.getSystemPrompt(context);
+      console.log(
+        "🔵 [APIService] System prompt created, length:",
+        systemPrompt.length
+      );
+
+      // Prepare request payload
+      const requestPayload = {
+        audioData: {
+          base64: base64Audio,
+          mediaType: mediaType,
+        },
+        context,
+        systemPrompt,
+      };
+      console.log("🔵 [APIService] Request payload prepared:", {
+        audioDataSize: requestPayload.audioData.base64.length,
+        mediaType: requestPayload.audioData.mediaType,
+        contextKeys: Object.keys(requestPayload.context),
+        systemPromptLength: requestPayload.systemPrompt.length,
+      });
 
       // Make API call
-      console.log(`Making API call to: ${this.baseUrl}/api/ai/process-audio`);
-      const response = await fetch(`${this.baseUrl}/api/ai/process-audio`, {
+      const apiUrl = `${this.baseUrl}/api/ai/process-audio`;
+      console.log("🔵 [APIService] Making API call to:", apiUrl);
+      console.log("🔵 [APIService] Base URL:", this.baseUrl);
+      console.log("🔵 [APIService] Full URL:", apiUrl);
+
+      // Make the API request with proper timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          audioData: {
-            base64: base64Audio,
-            mediaType: mediaType,
-          },
-          context,
-          systemPrompt,
-        }),
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log("🔵 [APIService] Response received:", {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries()),
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("🔴 [APIService] API request failed:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+        });
         throw new Error(
-          `API request failed: ${response.status} ${response.statusText}`
+          `API request failed: ${response.status} ${response.statusText} - ${errorText}`
         );
       }
 
+      console.log("🔵 [APIService] Parsing response JSON...");
       const result = await response.json();
+      console.log("🔵 [APIService] Response parsed:", {
+        success: result.success,
+        status: result.status,
+        hasSummary: !!result.summary,
+        toolCallsCount: result.toolCalls?.length || 0,
+        hasError: !!result.error,
+        fullResponse: result.fullResponse?.substring(0, 100) + "...",
+      });
 
       if (!result.success) {
+        console.error(
+          "🔴 [APIService] API returned success: false",
+          result.error
+        );
         throw new Error(result.error || "Unknown API error");
       }
 
-      return {
+      const finalResult = {
         summary: result.summary,
         status: result.status,
         toolCalls: result.toolCalls,
         success: result.success,
       };
+      console.log("🔵 [APIService] Returning successful result:", {
+        summaryLength: finalResult.summary?.length,
+        status: finalResult.status,
+        toolCallsCount: finalResult.toolCalls?.length,
+      });
+
+      return finalResult;
     } catch (error) {
-      console.error("API service error:", error);
+      console.error("🔴 [APIService] Error in processAudio:", error);
+      console.error("🔴 [APIService] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      // Handle specific error types
+      let errorMessage = "Failed to process voice command. Please try again.";
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          errorMessage =
+            "Request timed out. Please try again with a shorter audio clip.";
+        } else if (error.message.includes("fetch")) {
+          errorMessage =
+            "Network error. Please check your connection and try again.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
       return {
-        summary: "Failed to process voice command. Please try again.",
+        summary: errorMessage,
         status: "error",
         toolCalls: [],
         success: false,
@@ -82,18 +208,36 @@ export class APIService {
   private async convertAudioToUint8Array(
     audioData: AudioData
   ): Promise<Uint8Array> {
+    console.log(
+      "🔵 [APIService] convertAudioToUint8Array - Starting conversion"
+    );
     try {
       // If we already have the data as Uint8Array, use it
       if (audioData.data) {
+        console.log(
+          "🔵 [APIService] Using existing Uint8Array data, length:",
+          audioData.data.length
+        );
         return audioData.data;
       }
 
       // If we have a blob, try to convert it
       if (audioData.blob) {
+        console.log(
+          "🔵 [APIService] Converting blob to Uint8Array, blob type:",
+          audioData.blob.type
+        );
         if (typeof audioData.blob.arrayBuffer === "function") {
+          console.log("🔵 [APIService] Using arrayBuffer() method");
           const arrayBuffer = await audioData.blob.arrayBuffer();
-          return new Uint8Array(arrayBuffer);
+          const result = new Uint8Array(arrayBuffer);
+          console.log(
+            "🔵 [APIService] Blob converted via arrayBuffer, length:",
+            result.length
+          );
+          return result;
         } else if (typeof audioData.blob.stream === "function") {
+          console.log("🔵 [APIService] Using stream() method");
           const stream = audioData.blob.stream();
           const reader = stream.getReader();
           const chunks: Uint8Array[] = [];
@@ -114,31 +258,63 @@ export class APIService {
             result.set(chunk, offset);
             offset += chunk.length;
           }
+          console.log(
+            "🔵 [APIService] Blob converted via stream, length:",
+            result.length
+          );
           return result;
+        } else {
+          console.warn(
+            "🔴 [APIService] Blob has neither arrayBuffer nor stream method"
+          );
         }
       }
 
       // Fallback: try to fetch the URI and convert to Uint8Array
       if (audioData.uri) {
+        console.log("🔵 [APIService] Fetching audio from URI:", audioData.uri);
         try {
           const response = await fetch(audioData.uri);
+          console.log("🔵 [APIService] URI fetch response:", {
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+          });
           if (response.ok) {
             const arrayBuffer = await response.arrayBuffer();
-            return new Uint8Array(arrayBuffer);
+            const result = new Uint8Array(arrayBuffer);
+            console.log(
+              "🔵 [APIService] URI audio converted, length:",
+              result.length
+            );
+            return result;
           }
         } catch (fetchError) {
-          console.warn("Failed to fetch audio URI:", fetchError);
+          console.error(
+            "🔴 [APIService] Failed to fetch audio URI:",
+            fetchError
+          );
         }
       }
 
+      console.error(
+        "🔴 [APIService] Unable to convert audio data to Uint8Array - no valid data source found"
+      );
       throw new Error("Unable to convert audio data to Uint8Array");
     } catch (error) {
-      console.error("Error converting audio to Uint8Array:", error);
+      console.error(
+        "🔴 [APIService] Error converting audio to Uint8Array:",
+        error
+      );
       throw error;
     }
   }
 
   private uint8ArrayToBase64(uint8Array: Uint8Array): string {
+    console.log(
+      "🔵 [APIService] uint8ArrayToBase64 - Starting conversion, input length:",
+      uint8Array.length
+    );
     // Use a more compatible base64 encoding method
     const chars =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -159,6 +335,10 @@ export class APIService {
       result += i - 1 < uint8Array.length ? chars.charAt(bitmap & 63) : "=";
     }
 
+    console.log(
+      "🔵 [APIService] Base64 conversion complete, output length:",
+      result.length
+    );
     return result;
   }
 

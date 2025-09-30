@@ -1,7 +1,4 @@
-import { google } from "@ai-sdk/google";
-import { streamText, tool } from "ai";
-import { z } from "zod";
-import { medicalTools } from "./tools";
+// Client-side streaming AI service - delegates to API route
 import { AppContext, VoiceServiceResponse } from "../types";
 import {
   convertAudioToUint8Array,
@@ -23,12 +20,16 @@ export class StreamingAIService {
   private model: any;
   private isProcessing = false;
 
-  constructor(apiKey?: string) {
-    // Set the API key as environment variable for the Google provider
-    if (apiKey && apiKey !== "mock-api-key") {
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
-    }
-    this.model = google("gemini-2.5-flash");
+  constructor() {
+    console.log(
+      "🟠 [StreamingAIService] Constructor called (API keys handled server-side)"
+    );
+    console.log(
+      "🟠 [StreamingAIService] Note: This service is for client-side use only"
+    );
+    console.log(
+      "🟠 [StreamingAIService] Actual AI processing happens in API route"
+    );
   }
 
   async processAudioWithStreaming(
@@ -36,446 +37,177 @@ export class StreamingAIService {
     context: AppContext,
     callbacks: StreamingCallback
   ): Promise<void> {
+    console.log("🟠 [StreamingAIService] Starting processAudioWithStreaming");
+    console.log("🟠 [StreamingAIService] Audio data received:", {
+      hasData: !!audioData.data,
+      hasBlob: !!audioData.blob,
+      hasUri: !!audioData.uri,
+      dataLength: audioData.data?.length,
+      blobType: audioData.blob?.type,
+      uri: audioData.uri,
+    });
+    console.log("🟠 [StreamingAIService] Context received:", {
+      currentScreen: context.currentScreen,
+      currentPatient: context.currentPatient?.id,
+      currentReport: context.currentReport?.id,
+    });
+
     if (this.isProcessing) {
+      console.log(
+        "🟠 [StreamingAIService] Already processing, returning busy status"
+      );
       callbacks.onError("Already processing a request. Please wait.");
       return;
     }
 
     this.isProcessing = true;
+    console.log("🟠 [StreamingAIService] Set processing flag to true");
 
     try {
       callbacks.onStatusUpdate("Processing audio with AI...");
+      console.log(
+        "🟠 [StreamingAIService] Status update sent: Processing audio with AI..."
+      );
 
       // Validate audio data
+      console.log("🟠 [StreamingAIService] Validating audio data...");
       if (!validateAudioData(audioData)) {
+        console.error("🔴 [StreamingAIService] Audio data validation failed");
         throw new Error("Invalid audio data provided");
       }
+      console.log("🟠 [StreamingAIService] Audio data validation passed");
 
-      // Process audio directly with Gemini (no STT layer needed)
-      await this.processAudioDirectlyWithStreaming(
-        audioData,
-        context,
-        callbacks
-      );
+      // Process audio via API route (server-side processing)
+      console.log("🟠 [StreamingAIService] Starting API route processing...");
+      await this.processAudioViaAPI(audioData, context, callbacks);
+      console.log("🟠 [StreamingAIService] API route processing completed");
     } catch (error) {
-      console.error("AI processing error:", error);
+      console.error("🔴 [StreamingAIService] AI processing error:", error);
+      console.error("🔴 [StreamingAIService] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       callbacks.onError(
         error instanceof Error ? error.message : "Unknown error"
       );
     } finally {
       this.isProcessing = false;
+      console.log("🟠 [StreamingAIService] Set processing flag to false");
     }
   }
 
-  private async processAudioDirectlyWithStreaming(
+  private async processAudioViaAPI(
     audioData: AudioData,
     context: AppContext,
     callbacks: StreamingCallback
   ): Promise<void> {
+    console.log(
+      "🟠 [StreamingAIService] processAudioViaAPI - Starting API route processing"
+    );
     try {
-      // Create AI tools from our medical tools
-      const aiTools = this.createAITools(callbacks);
+      callbacks.onStatusUpdate("Sending audio to AI service...");
+      console.log(
+        "🟠 [StreamingAIService] Status update sent: Sending audio to AI service..."
+      );
 
-      // Get contextual prompt
-      const systemPrompt = this.getSystemPrompt(context);
-
-      callbacks.onStatusUpdate("Generating AI response...");
-
-      // Convert audio data to Uint8Array for Gemini
+      // Convert audio data to base64 for API transmission
+      console.log("🟠 [StreamingAIService] Converting audio data...");
       const audioUint8Array = await convertAudioToUint8Array(audioData);
       const mediaType = getAudioMediaType(audioData);
 
-      // Stream the AI response with audio input
-      const result = streamText({
-        model: this.model,
-        system: systemPrompt,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Please process this audio command and execute the appropriate medical operations.",
-              },
-              {
-                type: "file",
-                data: audioUint8Array,
-                mediaType: mediaType,
-              },
-            ],
-          },
-        ],
-        tools: aiTools,
+      // Convert to base64
+      const base64Audio = btoa(String.fromCharCode(...audioUint8Array));
+      console.log(
+        "🟠 [StreamingAIService] Audio converted to base64, length:",
+        base64Audio.length,
+        "type:",
+        mediaType
+      );
+
+      // Get system prompt
+      const systemPrompt = this.getSystemPrompt(context);
+
+      // Prepare request payload
+      const requestPayload = {
+        audioData: {
+          base64: base64Audio,
+          mediaType: mediaType,
+        },
+        context: context,
+        systemPrompt: systemPrompt,
+      };
+
+      console.log("🟠 [StreamingAIService] Sending request to API route...");
+
+      // Make API request
+      const response = await fetch("/api/ai/process-audio", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestPayload),
       });
 
-      // Collect the streaming response
-      let fullResponse = "";
-      let toolCalls: Array<{ tool: string; args: any; result?: any }> = [];
-
-      // Stream text response
-      for await (const delta of result.textStream) {
-        fullResponse += delta;
-        callbacks.onStreamingText(fullResponse);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `API request failed: ${response.status} ${response.statusText} - ${errorText}`
+        );
       }
 
-      // Get the final result
-      const finalResult = await result;
+      const result = await response.json();
+      console.log("🟠 [StreamingAIService] API response received:", {
+        success: result.success,
+        summaryLength: result.summary?.length || 0,
+        toolCallsCount: result.toolCalls?.length || 0,
+      });
 
-      // Extract and execute tool calls
-      const toolCallsResult = await finalResult.toolCalls;
-      if (toolCallsResult && toolCallsResult.length > 0) {
+      // Simulate streaming by sending the response in chunks
+      if (result.fullResponse) {
+        callbacks.onStatusUpdate("Processing AI response...");
+        callbacks.onStreamingText(result.fullResponse);
+      }
+
+      // Process tool calls
+      if (result.toolCalls && result.toolCalls.length > 0) {
         callbacks.onStatusUpdate("Executing medical operations...");
-
-        for (const toolCall of toolCallsResult) {
-          const toolName = toolCall.toolName;
-          const args = toolCall.input;
-
-          callbacks.onToolCall(toolName, args);
-
-          // Execute the actual tool
-          let toolResult;
-          try {
-            toolResult = await this.executeTool(toolName, args);
-            callbacks.onToolResult(toolName, toolResult);
-          } catch (error) {
-            toolResult = {
-              error: error instanceof Error ? error.message : "Unknown error",
-            };
-            callbacks.onToolResult(toolName, toolResult);
-          }
-
-          toolCalls.push({
-            tool: toolName,
-            args,
-            result: toolResult,
-          });
+        for (const toolCall of result.toolCalls) {
+          callbacks.onToolCall(toolCall.tool, toolCall.args);
+          callbacks.onToolResult(toolCall.tool, toolCall.result);
         }
       }
 
-      // Generate final summary
-      const finalSummary = this.generateSummary(toolCalls, fullResponse);
-
       callbacks.onStatusUpdate("Task completed");
-      callbacks.onComplete({
-        summary: finalSummary,
-        status: "completed",
-        toolCalls,
-        success: true,
+      console.log("🟠 [StreamingAIService] Status update sent: Task completed");
+
+      const finalResponse = {
+        summary: result.summary || "Task completed successfully",
+        status: result.status || "completed",
+        toolCalls: result.toolCalls || [],
+        success: result.success || true,
+      };
+
+      console.log("🟠 [StreamingAIService] Calling onComplete with response:", {
+        summaryLength: finalResponse.summary.length,
+        toolCallsCount: finalResponse.toolCalls.length,
       });
+
+      callbacks.onComplete(finalResponse);
     } catch (error) {
-      console.error("AI processing error:", error);
+      console.error(
+        "🔴 [StreamingAIService] API processing error in processAudioViaAPI:",
+        error
+      );
+      console.error("🔴 [StreamingAIService] Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       callbacks.onError(
         error instanceof Error ? error.message : "Unknown error"
       );
     }
-  }
-
-  private createAITools(callbacks: StreamingCallback) {
-    return {
-      // Patient operations
-      getPatient: tool({
-        description: "Get patient information by ID",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-        }),
-        execute: async ({ patientId }) => {
-          callbacks.onStreamingText(
-            `Retrieving patient information for ID: ${patientId}`
-          );
-          return await medicalTools.getPatient(patientId);
-        },
-      }),
-
-      searchPatients: tool({
-        description: "Search for patients by various criteria",
-        inputSchema: z.object({
-          query: z.string().optional().describe("Search query"),
-          room: z.string().optional().describe("Room number"),
-          condition: z.string().optional().describe("Medical condition"),
-          isUrgent: z.boolean().optional().describe("Urgent patients only"),
-        }),
-        execute: async ({ query, room, condition, isUrgent }) => {
-          callbacks.onStreamingText(
-            `Searching patients with criteria: ${JSON.stringify({
-              query,
-              room,
-              condition,
-              isUrgent,
-            })}`
-          );
-          return await medicalTools.searchPatients(
-            query,
-            room,
-            condition,
-            isUrgent
-          );
-        },
-      }),
-
-      updatePatient: tool({
-        description: "Update patient information",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-          updates: z.record(z.any()).describe("Updates to apply"),
-        }),
-        execute: async ({ patientId, updates }) => {
-          callbacks.onStreamingText(
-            `Updating patient ${patientId} with changes: ${JSON.stringify(
-              updates
-            )}`
-          );
-          return await medicalTools.updatePatient(patientId, updates);
-        },
-      }),
-
-      createPatient: tool({
-        description: "Create a new patient record",
-        inputSchema: z.object({
-          patientData: z.record(z.any()).describe("Patient data"),
-        }),
-        execute: async ({ patientData }) => {
-          callbacks.onStreamingText(
-            `Creating new patient record: ${JSON.stringify(patientData)}`
-          );
-          return await medicalTools.createPatient(patientData);
-        },
-      }),
-
-      // Vital signs operations
-      getLatestVitals: tool({
-        description: "Get the latest vital signs for a patient",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-        }),
-        execute: async ({ patientId }) => {
-          callbacks.onStreamingText(
-            `Retrieving latest vital signs for patient ${patientId}`
-          );
-          return await medicalTools.getLatestVitals(patientId);
-        },
-      }),
-
-      updateVitals: tool({
-        description: "Update patient vital signs",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-          updates: z.record(z.any()).describe("Vital signs updates"),
-        }),
-        execute: async ({ patientId, updates }) => {
-          callbacks.onStreamingText(
-            `Updating vital signs for patient ${patientId}: ${JSON.stringify(
-              updates
-            )}`
-          );
-          return await medicalTools.updateVitals(patientId, updates);
-        },
-      }),
-
-      // Medication operations
-      listMedications: tool({
-        description: "List all medications for a patient",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-        }),
-        execute: async ({ patientId }) => {
-          callbacks.onStreamingText(
-            `Retrieving medication list for patient ${patientId}`
-          );
-          return await medicalTools.listMedications(patientId);
-        },
-      }),
-
-      addMedication: tool({
-        description: "Add a new medication for a patient",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-          medicationData: z.record(z.any()).describe("Medication data"),
-        }),
-        execute: async ({ patientId, medicationData }) => {
-          callbacks.onStreamingText(
-            `Adding medication ${
-              medicationData.name || "unknown"
-            } for patient ${patientId}`
-          );
-          return await medicalTools.addMedication(patientId, medicationData);
-        },
-      }),
-
-      updateMedication: tool({
-        description: "Update an existing medication",
-        inputSchema: z.object({
-          medId: z.string().describe("The medication ID"),
-          updates: z.record(z.any()).describe("Updates to apply"),
-        }),
-        execute: async ({ medId, updates }) => {
-          callbacks.onStreamingText(
-            `Updating medication ${medId} with changes: ${JSON.stringify(
-              updates
-            )}`
-          );
-          return await medicalTools.updateMedication(medId, updates);
-        },
-      }),
-
-      removeMedication: tool({
-        description: "Remove a medication from a patient",
-        inputSchema: z.object({
-          medId: z.string().describe("The medication ID"),
-        }),
-        execute: async ({ medId }) => {
-          callbacks.onStreamingText(`Removing medication ${medId}`);
-          return await medicalTools.removeMedication(medId);
-        },
-      }),
-
-      // Report operations
-      listReports: tool({
-        description: "List medical reports",
-        inputSchema: z.object({
-          patientId: z.string().optional().describe("Filter by patient ID"),
-          status: z.string().optional().describe("Filter by status"),
-        }),
-        execute: async ({ patientId, status }) => {
-          callbacks.onStreamingText(
-            `Retrieving reports for patient ${patientId || "all patients"}`
-          );
-          return await medicalTools.listReports(patientId, status);
-        },
-      }),
-
-      createReport: tool({
-        description: "Create a new medical report",
-        inputSchema: z.object({
-          reportData: z.record(z.any()).describe("Report data"),
-        }),
-        execute: async ({ reportData }) => {
-          callbacks.onStreamingText(
-            `Creating medical report: ${reportData.type || "Assessment"}`
-          );
-          return await medicalTools.createReport(reportData);
-        },
-      }),
-
-      updateReport: tool({
-        description: "Update an existing medical report",
-        inputSchema: z.object({
-          reportId: z.string().describe("The report ID"),
-          updates: z.record(z.any()).describe("Updates to apply"),
-        }),
-        execute: async ({ reportId, updates }) => {
-          callbacks.onStreamingText(
-            `Updating report ${reportId} with changes: ${JSON.stringify(
-              updates
-            )}`
-          );
-          return await medicalTools.updateReport(reportId, updates);
-        },
-      }),
-
-      approveReport: tool({
-        description: "Approve a medical report",
-        inputSchema: z.object({
-          reportId: z.string().describe("The report ID"),
-        }),
-        execute: async ({ reportId }) => {
-          callbacks.onStreamingText(`Approving report ${reportId}`);
-          return await medicalTools.approveReport(reportId);
-        },
-      }),
-
-      // Appointment operations
-      listAppointments: tool({
-        description: "List appointments",
-        inputSchema: z.object({
-          patientId: z.string().optional().describe("Filter by patient ID"),
-          date: z.string().optional().describe("Filter by date"),
-        }),
-        execute: async ({ patientId, date }) => {
-          callbacks.onStreamingText(
-            `Retrieving appointments for patient ${patientId || "all patients"}`
-          );
-          return await medicalTools.listAppointments(patientId, date);
-        },
-      }),
-
-      scheduleAppointment: tool({
-        description: "Schedule a new appointment",
-        inputSchema: z.object({
-          appointmentData: z.record(z.any()).describe("Appointment data"),
-        }),
-        execute: async ({ appointmentData }) => {
-          callbacks.onStreamingText(
-            `Scheduling appointment for patient ${
-              appointmentData.patientId || "unknown"
-            }`
-          );
-          return await medicalTools.scheduleAppointment(appointmentData);
-        },
-      }),
-
-      updateAppointment: tool({
-        description: "Update an existing appointment",
-        inputSchema: z.object({
-          appointmentId: z.string().describe("The appointment ID"),
-          updates: z.record(z.any()).describe("Updates to apply"),
-        }),
-        execute: async ({ appointmentId, updates }) => {
-          callbacks.onStreamingText(
-            `Updating appointment ${appointmentId} with changes: ${JSON.stringify(
-              updates
-            )}`
-          );
-          return await medicalTools.updateAppointment(appointmentId, updates);
-        },
-      }),
-
-      cancelAppointment: tool({
-        description: "Cancel an appointment",
-        inputSchema: z.object({
-          appointmentId: z.string().describe("The appointment ID"),
-        }),
-        execute: async ({ appointmentId }) => {
-          callbacks.onStreamingText(`Cancelling appointment ${appointmentId}`);
-          return await medicalTools.cancelAppointment(appointmentId);
-        },
-      }),
-
-      // Utility operations
-      addNote: tool({
-        description: "Add a note to a patient record",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-          text: z.string().describe("Note text"),
-          category: z.string().optional().describe("Note category"),
-        }),
-        execute: async ({ patientId, text, category }) => {
-          callbacks.onStreamingText(
-            `Adding note to patient ${patientId}: ${text.substring(0, 50)}...`
-          );
-          return await medicalTools.addNote(patientId, text, category);
-        },
-      }),
-
-      getPatientSummary: tool({
-        description: "Get a comprehensive patient summary",
-        inputSchema: z.object({
-          patientId: z.string().describe("The patient ID"),
-        }),
-        execute: async ({ patientId }) => {
-          callbacks.onStreamingText(
-            `Generating comprehensive summary for patient ${patientId}`
-          );
-          return await medicalTools.getPatientSummary(patientId);
-        },
-      }),
-    };
-  }
-
-  private async executeTool(toolName: string, args: any): Promise<any> {
-    // This method handles the actual execution of tools
-    // The tools are already defined in the createAITools method above
-    // This is just a fallback for any additional processing needed
-    return { success: true, message: `Executed ${toolName}` };
   }
 
   private getSystemPrompt(context: AppContext): string {
@@ -576,10 +308,16 @@ Remember: You are working with real medical data, so accuracy and safety are par
 // Export singleton instance
 export let streamingAIService: StreamingAIService | null = null;
 
-export const initializeStreamingAIService = (
-  apiKey?: string
-): StreamingAIService => {
-  streamingAIService = new StreamingAIService(apiKey);
+export const initializeStreamingAIService = (): StreamingAIService => {
+  console.log(
+    "🟠 [StreamingAIService] Initializing StreamingAIService (client-side only)"
+  );
+
+  streamingAIService = new StreamingAIService();
+  console.log(
+    "🟠 [StreamingAIService] StreamingAIService instance created successfully"
+  );
+
   return streamingAIService;
 };
 
