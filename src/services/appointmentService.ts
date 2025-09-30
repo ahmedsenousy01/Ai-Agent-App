@@ -1,4 +1,10 @@
-import { Appointment, ID, ISODate } from "../types";
+import {
+  Appointment,
+  ID,
+  ISODate,
+  AppointmentCreate,
+  AppointmentUpdate,
+} from "../types";
 import { dataStore } from "../data/dataStore";
 
 export class AppointmentService {
@@ -6,24 +12,10 @@ export class AppointmentService {
     return dataStore.listAppointments(patientId, date);
   }
 
-  static scheduleAppointment(appointmentData: {
-    patientId: ID;
-    scheduledFor: ISODate;
-    reason: string;
-    location?: string;
-    duration?: number;
-    clinicianName?: string;
-    notes?: string;
-  }): Appointment {
-    const newAppointment: Omit<Appointment, "id"> = {
-      patientId: appointmentData.patientId,
-      scheduledFor: appointmentData.scheduledFor,
-      reason: appointmentData.reason,
-      location: appointmentData.location,
-      duration: appointmentData.duration || 30,
-      clinicianName: appointmentData.clinicianName,
-      status: "Scheduled",
-      notes: appointmentData.notes,
+  static scheduleAppointment(appointmentData: AppointmentCreate): Appointment {
+    const newAppointment: AppointmentCreate = {
+      ...appointmentData,
+      status: appointmentData.status || "Scheduled",
     };
 
     const result = dataStore.scheduleAppointment(newAppointment);
@@ -33,7 +25,7 @@ export class AppointmentService {
 
   static updateAppointment(
     appointmentId: ID,
-    updates: Partial<Appointment>
+    updates: AppointmentUpdate
   ): Appointment | null {
     const result = dataStore.updateAppointment(appointmentId, updates);
     if (result) {

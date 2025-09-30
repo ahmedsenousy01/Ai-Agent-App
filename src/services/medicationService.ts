@@ -1,4 +1,4 @@
-import { Medication, ID } from "../types";
+import { Medication, ID, MedicationCreate, MedicationUpdate } from "../types";
 import { dataStore } from "../data/dataStore";
 
 export class MedicationService {
@@ -8,23 +8,11 @@ export class MedicationService {
 
   static addMedication(
     patientId: ID,
-    medicationData: {
-      name: string;
-      dosage: string;
-      type: string;
-      instructions?: string;
-      prescribedBy?: string;
-    }
+    medicationData: MedicationCreate
   ): Medication {
-    const newMedication: Omit<Medication, "id"> = {
+    const newMedication: MedicationCreate = {
+      ...medicationData,
       patientId,
-      name: medicationData.name,
-      dosage: medicationData.dosage,
-      type: medicationData.type,
-      instructions: medicationData.instructions,
-      prescribedBy: medicationData.prescribedBy,
-      startedAt: new Date().toISOString(),
-      active: true,
     };
 
     const result = dataStore.addMedication(newMedication);
@@ -34,7 +22,7 @@ export class MedicationService {
 
   static updateMedication(
     medId: ID,
-    updates: Partial<Medication>
+    updates: MedicationUpdate
   ): Medication | null {
     const result = dataStore.updateMedication(medId, updates);
     if (result) {

@@ -1,82 +1,9 @@
 import { google } from "@ai-sdk/google";
-import { streamText, tool } from "ai";
-import { z } from "zod";
+import { streamText } from "ai";
 
-// Mock medical tools for server-side API route
-const medicalTools = {
-  getPatient: async (patientId: string) => ({
-    id: patientId,
-    name: "Mock Patient",
-  }),
-  searchPatients: async (
-    query?: string,
-    room?: string,
-    condition?: string,
-    isUrgent?: boolean
-  ) => [],
-  updatePatient: async (patientId: string, updates: any) => ({
-    success: true,
-    patientId,
-    updates,
-  }),
-  createPatient: async (patientData: any) => ({
-    success: true,
-    patient: patientData,
-  }),
-  getLatestVitals: async (patientId: string) => ({ patientId, vitals: {} }),
-  updateVitals: async (patientId: string, updates: any) => ({
-    success: true,
-    patientId,
-    updates,
-  }),
-  listMedications: async (patientId: string) => [],
-  addMedication: async (patientId: string, medicationData: any) => ({
-    success: true,
-    patientId,
-    medication: medicationData,
-  }),
-  updateMedication: async (medId: string, updates: any) => ({
-    success: true,
-    medId,
-    updates,
-  }),
-  removeMedication: async (medId: string) => ({ success: true, medId }),
-  listReports: async (patientId?: string, status?: string) => [],
-  createReport: async (reportData: any) => ({
-    success: true,
-    report: reportData,
-  }),
-  updateReport: async (reportId: string, updates: any) => ({
-    success: true,
-    reportId,
-    updates,
-  }),
-  approveReport: async (reportId: string) => ({ success: true, reportId }),
-  listAppointments: async (patientId?: string, date?: string) => [],
-  scheduleAppointment: async (appointmentData: any) => ({
-    success: true,
-    appointment: appointmentData,
-  }),
-  updateAppointment: async (appointmentId: string, updates: any) => ({
-    success: true,
-    appointmentId,
-    updates,
-  }),
-  cancelAppointment: async (appointmentId: string) => ({
-    success: true,
-    appointmentId,
-  }),
-  addNote: async (patientId: string, text: string, category?: string) => ({
-    success: true,
-    patientId,
-    note: text,
-    category,
-  }),
-  getPatientSummary: async (patientId: string) => ({
-    patientId,
-    summary: "Mock patient summary",
-  }),
-};
+// Import the centralized AI tools
+import { createAITools } from "../../../src/ai/tools";
+import { dataStore } from "../../../src/data/dataStore";
 
 export async function GET(request: Request): Promise<Response> {
   return Response.json({ message: "Hello, world!" });
@@ -170,18 +97,29 @@ export async function POST(request: Request): Promise<Response> {
         Object.keys(aiTools).length
       );
 
+      // Generate comprehensive system prompt with app data context
+      console.log("🟢 [API Route] Generating system prompt with app data...");
+      const enhancedSystemPrompt = generateEnhancedSystemPrompt(
+        systemPrompt,
+        context
+      );
+      console.log(
+        "🟢 [API Route] Enhanced system prompt generated, length:",
+        enhancedSystemPrompt.length
+      );
+
       // Stream the AI response with audio input
       console.log("🟢 [API Route] Starting AI stream processing...");
       const result = streamText({
         model,
-        system: systemPrompt,
+        system: enhancedSystemPrompt,
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: "Please process this audio command and execute the appropriate medical operations.",
+                text: "Please process this audio command and execute the appropriate medical operations using the available data and tools.",
               },
               {
                 type: "file",
@@ -235,29 +173,14 @@ export async function POST(request: Request): Promise<Response> {
               args
             );
 
-            // Execute the actual tool
-            let toolResult;
-            try {
-              toolResult = await executeTool(toolName, args);
-              console.log(
-                "🟢 [API Route] Tool executed successfully:",
-                toolName
-              );
-            } catch (error) {
-              console.error(
-                "🔴 [API Route] Tool execution failed:",
-                toolName,
-                error
-              );
-              toolResult = {
-                error: error instanceof Error ? error.message : "Unknown error",
-              };
-            }
+            // Tool execution is handled by the AI SDK through createAITools
+            // No additional processing needed here
+            console.log("🟢 [API Route] Tool executed successfully:", toolName);
 
             toolCalls.push({
               tool: toolName,
               args,
-              result: toolResult,
+              result: { success: true },
             });
           }
         }
@@ -270,12 +193,20 @@ export async function POST(request: Request): Promise<Response> {
           finalSummary.length
         );
 
+        // Get updated data context after tool execution
+        const updatedContext = dataStore.getAppContext(
+          context.currentScreen,
+          context.currentPatient?.id,
+          context.currentReport?.id
+        );
+
         const responseData = {
           summary: finalSummary,
           status: "completed",
           toolCalls,
           success: true,
           fullResponse,
+          updatedContext, // Include updated data for client sync
         };
 
         console.log("🟢 [API Route] Returning successful response:", {
@@ -287,26 +218,6 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json(responseData);
       } catch (streamError) {
         console.error("🔴 [API Route] Stream processing error:", streamError);
-
-        // If no output was generated, provide a fallback response
-        if (
-          streamError instanceof Error &&
-          streamError.message.includes("No output generated")
-        ) {
-          console.log(
-            "🟢 [API Route] No output generated, providing fallback response"
-          );
-          const fallbackResponse = {
-            summary:
-              "Audio command processed successfully. No specific medical operations were required.",
-            status: "completed",
-            toolCalls: [],
-            success: true,
-            fullResponse:
-              "The audio command was received and processed. The system is ready for further instructions.",
-          };
-          return Response.json(fallbackResponse);
-        }
 
         throw streamError;
       }
@@ -332,239 +243,170 @@ export async function POST(request: Request): Promise<Response> {
   return Promise.race([processRequest(), timeoutPromise]);
 }
 
-function createAITools() {
-  return {
-    // Patient operations
-    getPatient: tool({
-      description: "Get patient information by ID",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-      }),
-      execute: async ({ patientId }) => {
-        return await medicalTools.getPatient(patientId);
-      },
-    }),
+function generateEnhancedSystemPrompt(
+  basePrompt: string,
+  context: any
+): string {
+  console.log(
+    "🟢 [API Route] Building enhanced system prompt with context data..."
+  );
 
-    searchPatients: tool({
-      description: "Search for patients by various criteria",
-      inputSchema: z.object({
-        query: z.string().optional().describe("Search query"),
-        room: z.string().optional().describe("Room number"),
-        condition: z.string().optional().describe("Medical condition"),
-        isUrgent: z.boolean().optional().describe("Urgent patients only"),
-      }),
-      execute: async ({ query, room, condition, isUrgent }) => {
-        return await medicalTools.searchPatients(
-          query,
-          room,
-          condition,
-          isUrgent
-        );
-      },
-    }),
+  // Extract key information from context
+  const patients = context.allPatients || [];
+  const reports = context.allReports || [];
+  const appointments = context.allAppointments || [];
+  const medications = context.allMedications || [];
+  const vitals = context.allVitals || [];
+  const clinicians = context.allClinicians || [];
 
-    updatePatient: tool({
-      description: "Update patient information",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-        updates: z.record(z.any()).describe("Updates to apply"),
-      }),
-      execute: async ({ patientId, updates }) => {
-        return await medicalTools.updatePatient(patientId, updates);
-      },
-    }),
+  // Build patient summary
+  const patientSummary = patients
+    .map(
+      (patient) =>
+        `- ${patient.name} (ID: ${patient.id}, Room: ${
+          patient.room
+        }, Condition: ${patient.condition}${
+          patient.isUrgent ? ", URGENT" : ""
+        })`
+    )
+    .join("\n");
 
-    createPatient: tool({
-      description: "Create a new patient record",
-      inputSchema: z.object({
-        patientData: z.record(z.any()).describe("Patient data"),
-      }),
-      execute: async ({ patientData }) => {
-        return await medicalTools.createPatient(patientData);
-      },
-    }),
+  // Build recent reports summary
+  const recentReports = reports
+    .slice(0, 5)
+    .map(
+      (report) =>
+        `- ${report.title} (${report.type}, Status: ${
+          report.status
+        }, Patient: ${
+          patients.find((p) => p.id === report.patientId)?.name || "Unknown"
+        })`
+    )
+    .join("\n");
 
-    // Vital signs operations
-    getLatestVitals: tool({
-      description: "Get the latest vital signs for a patient",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-      }),
-      execute: async ({ patientId }) => {
-        return await medicalTools.getLatestVitals(patientId);
-      },
-    }),
+  // Build upcoming appointments
+  const upcomingAppointments = appointments
+    .filter((apt) => new Date(apt.scheduledFor) > new Date())
+    .slice(0, 5)
+    .map(
+      (apt) =>
+        `- ${
+          patients.find((p) => p.id === apt.patientId)?.name || "Unknown"
+        } - ${apt.reason} (${new Date(apt.scheduledFor).toLocaleDateString()})`
+    )
+    .join("\n");
 
-    updateVitals: tool({
-      description: "Update patient vital signs",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-        updates: z.record(z.any()).describe("Vital signs updates"),
-      }),
-      execute: async ({ patientId, updates }) => {
-        return await medicalTools.updateVitals(patientId, updates);
-      },
-    }),
+  // Build urgent patients list
+  const urgentPatients = patients
+    .filter((p) => p.isUrgent)
+    .map((p) => `- ${p.name} (Room: ${p.room}, Condition: ${p.condition})`)
+    .join("\n");
 
-    // Medication operations
-    listMedications: tool({
-      description: "List all medications for a patient",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-      }),
-      execute: async ({ patientId }) => {
-        return await medicalTools.listMedications(patientId);
-      },
-    }),
+  const enhancedPrompt = `${basePrompt}
 
-    addMedication: tool({
-      description: "Add a new medication for a patient",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-        medicationData: z.record(z.any()).describe("Medication data"),
-      }),
-      execute: async ({ patientId, medicationData }) => {
-        return await medicalTools.addMedication(patientId, medicationData);
-      },
-    }),
+## CURRENT APP DATA CONTEXT
 
-    updateMedication: tool({
-      description: "Update an existing medication",
-      inputSchema: z.object({
-        medId: z.string().describe("The medication ID"),
-        updates: z.record(z.any()).describe("Updates to apply"),
-      }),
-      execute: async ({ medId, updates }) => {
-        return await medicalTools.updateMedication(medId, updates);
-      },
-    }),
+### Current Session Context
+- Current Screen: ${context.currentScreen || "Unknown"}
+- Current Patient: ${
+    context.currentPatient
+      ? `${context.currentPatient.name} (ID: ${context.currentPatient.id}, Room: ${context.currentPatient.room})`
+      : "None selected"
+  }
+- Current Report: ${
+    context.currentReport
+      ? `${context.currentReport.title} (ID: ${context.currentReport.id})`
+      : "None selected"
+  }
+- Current User: ${context.currentUser?.name || "Unknown"} (${
+    context.currentUser?.role || "Unknown"
+  })
 
-    removeMedication: tool({
-      description: "Remove a medication from a patient",
-      inputSchema: z.object({
-        medId: z.string().describe("The medication ID"),
-      }),
-      execute: async ({ medId }) => {
-        return await medicalTools.removeMedication(medId);
-      },
-    }),
+### Available Patients (${patients.length} total)
+${patientSummary || "No patients available"}
 
-    // Report operations
-    listReports: tool({
-      description: "List medical reports",
-      inputSchema: z.object({
-        patientId: z.string().optional().describe("Filter by patient ID"),
-        status: z.string().optional().describe("Filter by status"),
-      }),
-      execute: async ({ patientId, status }) => {
-        return await medicalTools.listReports(patientId, status);
-      },
-    }),
+### Urgent Patients (${patients.filter((p) => p.isUrgent).length} total)
+${urgentPatients || "No urgent patients"}
 
-    createReport: tool({
-      description: "Create a new medical report",
-      inputSchema: z.object({
-        reportData: z.record(z.any()).describe("Report data"),
-      }),
-      execute: async ({ reportData }) => {
-        return await medicalTools.createReport(reportData);
-      },
-    }),
+### Recent Reports (${reports.length} total, showing latest 5)
+${recentReports || "No reports available"}
 
-    updateReport: tool({
-      description: "Update an existing medical report",
-      inputSchema: z.object({
-        reportId: z.string().describe("The report ID"),
-        updates: z.record(z.any()).describe("Updates to apply"),
-      }),
-      execute: async ({ reportId, updates }) => {
-        return await medicalTools.updateReport(reportId, updates);
-      },
-    }),
+### Upcoming Appointments (${
+    appointments.filter((apt) => new Date(apt.scheduledFor) > new Date()).length
+  } total, showing next 5)
+${upcomingAppointments || "No upcoming appointments"}
 
-    approveReport: tool({
-      description: "Approve a medical report",
-      inputSchema: z.object({
-        reportId: z.string().describe("The report ID"),
-      }),
-      execute: async ({ reportId }) => {
-        return await medicalTools.approveReport(reportId);
-      },
-    }),
-
-    // Appointment operations
-    listAppointments: tool({
-      description: "List appointments",
-      inputSchema: z.object({
-        patientId: z.string().optional().describe("Filter by patient ID"),
-        date: z.string().optional().describe("Filter by date"),
-      }),
-      execute: async ({ patientId, date }) => {
-        return await medicalTools.listAppointments(patientId, date);
-      },
-    }),
-
-    scheduleAppointment: tool({
-      description: "Schedule a new appointment",
-      inputSchema: z.object({
-        appointmentData: z.record(z.any()).describe("Appointment data"),
-      }),
-      execute: async ({ appointmentData }) => {
-        return await medicalTools.scheduleAppointment(appointmentData);
-      },
-    }),
-
-    updateAppointment: tool({
-      description: "Update an existing appointment",
-      inputSchema: z.object({
-        appointmentId: z.string().describe("The appointment ID"),
-        updates: z.record(z.any()).describe("Updates to apply"),
-      }),
-      execute: async ({ appointmentId, updates }) => {
-        return await medicalTools.updateAppointment(appointmentId, updates);
-      },
-    }),
-
-    cancelAppointment: tool({
-      description: "Cancel an appointment",
-      inputSchema: z.object({
-        appointmentId: z.string().describe("The appointment ID"),
-      }),
-      execute: async ({ appointmentId }) => {
-        return await medicalTools.cancelAppointment(appointmentId);
-      },
-    }),
-
-    // Utility operations
-    addNote: tool({
-      description: "Add a note to a patient record",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-        text: z.string().describe("Note text"),
-        category: z.string().optional().describe("Note category"),
-      }),
-      execute: async ({ patientId, text, category }) => {
-        return await medicalTools.addNote(patientId, text, category);
-      },
-    }),
-
-    getPatientSummary: tool({
-      description: "Get a comprehensive patient summary",
-      inputSchema: z.object({
-        patientId: z.string().describe("The patient ID"),
-      }),
-      execute: async ({ patientId }) => {
-        return await medicalTools.getPatientSummary(patientId);
-      },
-    }),
-  };
+### Available Clinicians (${clinicians.length} total)
+${
+  clinicians
+    .map((c) => `- ${c.name} (${c.role}, Status: ${c.status || "Unknown"})`)
+    .join("\n") || "No clinicians available"
 }
 
-async function executeTool(toolName: string, args: any): Promise<any> {
-  // This method handles the actual execution of tools
-  // The tools are already defined in the createAITools method above
-  // This is just a fallback for any additional processing needed
-  return { success: true, message: `Executed ${toolName}` };
+## AVAILABLE TOOLS AND OPERATIONS
+
+You have access to the following medical tools to perform operations on the data:
+
+### Patient Management
+- getPatient(patientId): Get specific patient information
+- searchPatients(query?, room?, condition?, isUrgent?): Search patients by criteria
+- updatePatient(patientId, updates): Update patient information
+- createPatient(patientData): Create new patient record
+
+### Vital Signs
+- getLatestVitals(patientId): Get latest vital signs for a patient
+- updateVitals(patientId, updates): Record new vital signs
+- getVitalHistory(patientId, days): Get vital signs history
+
+### Medications
+- listMedications(patientId): List all medications for a patient
+- addMedication(patientId, medicationData): Add new medication
+- updateMedication(medId, updates): Update existing medication
+- removeMedication(medId): Remove medication
+
+### Reports
+- listReports(patientId?, status?): List medical reports
+- getReport(reportId): Get specific report
+- createReport(reportData): Create new medical report
+- updateReport(reportId, updates): Update existing report
+- approveReport(reportId): Approve a report
+- exportReportPDF(reportId): Export report as PDF
+
+### Appointments
+- listAppointments(patientId?, date?): List appointments
+- scheduleAppointment(appointmentData): Schedule new appointment
+- updateAppointment(appointmentId, updates): Update existing appointment
+- cancelAppointment(appointmentId): Cancel appointment
+
+### Utilities
+- addNote(patientId, text, category?): Add note to patient record
+- getPatientSummary(patientId): Get comprehensive patient summary
+
+## VOICE COMMAND EXAMPLES
+
+Based on the available data, you can handle commands like:
+- "Update John Smith's room to 205"
+- "Add medication Metformin 500mg twice daily for patient ID abc123"
+- "Show me all urgent patients"
+- "Create a discharge report for Sarah Johnson"
+- "Schedule an appointment for Mike Davis tomorrow at 2 PM"
+- "Record vitals for patient in room 101: blood pressure 120/80, heart rate 72"
+- "Approve report rep456"
+- "Export report rep456 as PDF"
+- "Add note to patient abc123: Patient responding well to treatment"
+
+## IMPORTANT INSTRUCTIONS
+
+1. **Use the actual data**: Always reference the real patient names, IDs, and data provided in the context above
+2. **Be specific**: When updating data, use exact patient IDs and provide complete information
+3. **Confirm actions**: Always confirm what you've done and provide feedback about the results
+4. **Handle errors gracefully**: If a patient ID doesn't exist or data is missing, explain clearly
+5. **Maintain privacy**: Be professional and maintain patient confidentiality in all responses
+
+Remember: You are working with real medical data, so accuracy and safety are paramount. Always double-check patient information before making changes.`;
+
+  console.log("🟢 [API Route] Enhanced system prompt generated successfully");
+  return enhancedPrompt;
 }
 
 function generateSummary(

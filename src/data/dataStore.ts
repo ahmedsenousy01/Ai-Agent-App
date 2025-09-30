@@ -30,6 +30,22 @@ class DataStore {
   private clinicians: Clinician[] = [...mockClinicians];
   private interactionLogs: InteractionLog[] = [...mockInteractionLogs];
 
+  // Event listeners for data changes
+  private listeners: Set<() => void> = new Set();
+
+  // Event system methods
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notifyListeners(): void {
+    console.log(
+      `🟡 [DataStore] Notifying ${this.listeners.size} listeners of data changes`
+    );
+    this.listeners.forEach((listener) => listener());
+  }
+
   // Patient operations
   getPatient(patientId: ID): Patient | null {
     return this.patients.find((p) => p.id === patientId) || null;
@@ -66,6 +82,7 @@ class DataStore {
     if (index === -1) return null;
 
     this.patients[index] = { ...this.patients[index], ...updates };
+    this.notifyListeners();
     return this.patients[index];
   }
 
@@ -75,6 +92,7 @@ class DataStore {
       id: this.generateId(),
     };
     this.patients.push(newPatient);
+    this.notifyListeners();
     return newPatient;
   }
 
@@ -101,6 +119,7 @@ class DataStore {
       id: this.generateId(),
     };
     this.reports.push(newReport);
+    this.notifyListeners();
     return newReport;
   }
 
@@ -109,6 +128,7 @@ class DataStore {
     if (index === -1) return null;
 
     this.reports[index] = { ...this.reports[index], ...updates };
+    this.notifyListeners();
     return this.reports[index];
   }
 
@@ -123,6 +143,7 @@ class DataStore {
       id: this.generateId(),
     };
     this.medications.push(newMedication);
+    this.notifyListeners();
     return newMedication;
   }
 
@@ -131,6 +152,7 @@ class DataStore {
     if (index === -1) return null;
 
     this.medications[index] = { ...this.medications[index], ...updates };
+    this.notifyListeners();
     return this.medications[index];
   }
 
@@ -139,6 +161,7 @@ class DataStore {
     if (index === -1) return false;
 
     this.medications.splice(index, 1);
+    this.notifyListeners();
     return true;
   }
 
@@ -162,6 +185,7 @@ class DataStore {
       ...updates,
     };
     this.vitals.push(newVitals);
+    this.notifyListeners();
     return newVitals;
   }
 
@@ -204,6 +228,7 @@ class DataStore {
       id: this.generateId(),
     };
     this.appointments.push(newAppointment);
+    this.notifyListeners();
     return newAppointment;
   }
 
@@ -215,6 +240,7 @@ class DataStore {
     if (index === -1) return null;
 
     this.appointments[index] = { ...this.appointments[index], ...updates };
+    this.notifyListeners();
     return this.appointments[index];
   }
 
@@ -225,6 +251,7 @@ class DataStore {
       id: this.generateId(),
     };
     this.interactionLogs.push(newLog);
+    this.notifyListeners();
     return newLog;
   }
 
@@ -280,6 +307,29 @@ class DataStore {
   // Helper methods
   private generateId(): ID {
     return Math.random().toString(36).substr(2, 9);
+  }
+
+  // Public method to sync data from server
+  syncFromServer(updatedContext: AppContext): void {
+    if (updatedContext.allPatients) {
+      this.patients = [...updatedContext.allPatients];
+    }
+    if (updatedContext.allReports) {
+      this.reports = [...updatedContext.allReports];
+    }
+    if (updatedContext.allAppointments) {
+      this.appointments = [...updatedContext.allAppointments];
+    }
+    if (updatedContext.allMedications) {
+      this.medications = [...updatedContext.allMedications];
+    }
+    if (updatedContext.allVitals) {
+      this.vitals = [...updatedContext.allVitals];
+    }
+    if (updatedContext.allInteractionLogs) {
+      this.interactionLogs = [...updatedContext.allInteractionLogs];
+    }
+    this.notifyListeners();
   }
 
   // Data persistence (optional localStorage for demo)

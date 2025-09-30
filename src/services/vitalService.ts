@@ -1,4 +1,4 @@
-import { VitalSnapshot, ID } from "../types";
+import { VitalSnapshot, ID, VitalUpdate } from "../types";
 import { dataStore } from "../data/dataStore";
 
 export class VitalService {
@@ -6,10 +6,7 @@ export class VitalService {
     return dataStore.getLatestVitals(patientId);
   }
 
-  static updateVitals(
-    patientId: ID,
-    updates: Partial<VitalSnapshot>
-  ): VitalSnapshot {
+  static updateVitals(patientId: ID, updates: VitalUpdate): VitalSnapshot {
     const result = dataStore.updateVitals(patientId, updates);
     dataStore.saveToStorage();
     return result;

@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Search, ChevronRight, AlertCircle } from "lucide-react-native";
 import { Patient } from "../types";
-import { PatientService } from "../services/patientService";
+import { usePatients } from "../hooks/useDataStore";
 
 interface PatientCardProps {
   patient: Patient;
@@ -119,17 +119,9 @@ export const PatientsScreen: React.FC<{
 }> = ({ onPatientSelect }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | "urgent">("all");
-  const [patients, setPatients] = useState<Patient[]>([]);
 
-  // Load patients from service
-  useEffect(() => {
-    const loadPatients = () => {
-      const allPatients = PatientService.searchPatients();
-      setPatients(allPatients);
-    };
-
-    loadPatients();
-  }, []);
+  // Use the hook to get patients with automatic updates
+  const patients = usePatients();
 
   return (
     <View style={styles.container}>

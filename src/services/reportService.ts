@@ -1,4 +1,4 @@
-import { Report, ID } from "../types";
+import { Report, ID, ReportCreate, ReportUpdate } from "../types";
 import { dataStore } from "../data/dataStore";
 
 export class ReportService {
@@ -10,13 +10,13 @@ export class ReportService {
     return dataStore.listReports(patientId, status);
   }
 
-  static createReport(reportData: Omit<Report, "id">): Report {
+  static createReport(reportData: ReportCreate): Report {
     const result = dataStore.createReport(reportData);
     dataStore.saveToStorage();
     return result;
   }
 
-  static updateReport(reportId: ID, updates: Partial<Report>): Report | null {
+  static updateReport(reportId: ID, updates: ReportUpdate): Report | null {
     const result = dataStore.updateReport(reportId, updates);
     if (result) {
       dataStore.saveToStorage();

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,19 +8,24 @@ import {
   Animated,
   Easing,
   Image,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  ArrowLeft, 
-  Activity, 
-  Heart, 
-  Thermometer, 
-  Wind, 
-  Droplets, 
-  Weight, 
-  Calendar 
-} from 'lucide-react-native';
-import { Patient } from '../types';
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  ArrowLeft,
+  Activity,
+  Heart,
+  Thermometer,
+  Wind,
+  Droplets,
+  Weight,
+  Calendar,
+} from "lucide-react-native";
+import { Patient } from "../types";
+import {
+  usePatientVitals,
+  usePatientMedications,
+  usePatientReports,
+} from "../hooks/useDataStore";
 
 interface PatientDetailsProps {
   patient: Patient;
@@ -34,32 +39,13 @@ interface VitalStat {
   color: string;
 }
 
-const mockVitals: VitalStat[] = [
-  { label: 'Heart Rate', value: '72 bpm', icon: Heart, color: '#ef4444' },
-  { label: 'Blood Pressure', value: '120/80 mmHg', icon: Activity, color: '#3b82f6' },
-  { label: 'Temperature', value: '98.6°F', icon: Thermometer, color: '#f97316' },
-  { label: 'Respiratory Rate', value: '16 breaths/min', icon: Wind, color: '#06b6d4' },
-  { label: 'Oxygen Saturation', value: '98%', icon: Droplets, color: '#10b981' },
-  { label: 'Weight', value: '180 lbs', icon: Weight, color: '#8b5cf6' },
-];
-
-const mockMedications = [
-  { name: 'Lisinopril', dosage: '20mg, once daily', type: 'ACE Inhibitor' },
-  { name: 'Metoprolol', dosage: '50mg, twice daily', type: 'Beta Blocker' },
-  { name: 'Aspirin', dosage: '81mg, once daily', type: 'Antiplatelet' },
-];
-
-const mockReports = [
-  { id: '1', title: 'Cardiology Assessment', date: '2024-01-15', type: 'Assessment' },
-  { id: '2', title: 'Lab Results Summary', date: '2024-01-14', type: 'Lab Report' },
-  { id: '3', title: 'Treatment Plan Update', date: '2024-01-12', type: 'Treatment' },
-];
-
-type Tab = 'overview' | 'history' | 'medications' | 'reports';
+type Tab = "overview" | "history" | "medications" | "reports";
 
 // Staggered fade-in animation hook
 const useStaggeredFadeIn = (itemCount: number, active: boolean) => {
-  const animatedValues = useRef(Array.from({ length: itemCount }, () => new Animated.Value(0))).current;
+  const animatedValues = useRef(
+    Array.from({ length: itemCount }, () => new Animated.Value(0))
+  ).current;
 
   useEffect(() => {
     if (active) {
@@ -73,31 +59,104 @@ const useStaggeredFadeIn = (itemCount: number, active: boolean) => {
       });
       Animated.stagger(100, animations).start();
     } else {
-      animatedValues.forEach(value => value.setValue(0));
+      animatedValues.forEach((value) => value.setValue(0));
     }
   }, [active, itemCount]);
 
   return animatedValues;
 };
 
-export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, onBack }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const animatedVitals = useStaggeredFadeIn(mockVitals.length, activeTab === 'overview');
-  const animatedMedications = useStaggeredFadeIn(mockMedications.length, activeTab === 'medications');
-  const animatedReports = useStaggeredFadeIn(mockReports.length, activeTab === 'reports');
+export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({
+  patient,
+  onBack,
+}) => {
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
+
+  // Get real data from data store with automatic updates
+  const patientVitals = usePatientVitals(patient.id);
+  const patientMedications = usePatientMedications(patient.id);
+  const patientReports = usePatientReports(patient.id);
+
+  // Convert real data to display format
+  const vitals = patientVitals
+    ? [
+        {
+          label: "Heart Rate",
+          value: patientVitals.heartRate || "N/A",
+          icon: Heart,
+          color: "#ef4444",
+        },
+        {
+          label: "Blood Pressure",
+          value: patientVitals.bloodPressure || "N/A",
+          icon: Activity,
+          color: "#3b82f6",
+        },
+        {
+          label: "Temperature",
+          value: patientVitals.temperature || "N/A",
+          icon: Thermometer,
+          color: "#f97316",
+        },
+        {
+          label: "Respiratory Rate",
+          value: patientVitals.respiratoryRate || "N/A",
+          icon: Wind,
+          color: "#06b6d4",
+        },
+        {
+          label: "Oxygen Saturation",
+          value: patientVitals.oxygenSaturation || "N/A",
+          icon: Droplets,
+          color: "#10b981",
+        },
+        {
+          label: "Weight",
+          value: patientVitals.weight || "N/A",
+          icon: Weight,
+          color: "#8b5cf6",
+        },
+      ]
+    : [];
+
+  const medications = patientMedications.map((med) => ({
+    name: med.name,
+    dosage: med.dosage,
+    type: med.type,
+  }));
+
+  const reports = patientReports.map((report) => ({
+    id: report.id,
+    title: report.title,
+    date: new Date(report.date).toLocaleDateString(),
+    type: report.type,
+  }));
+
+  const animatedVitals = useStaggeredFadeIn(
+    vitals.length,
+    activeTab === "overview"
+  );
+  const animatedMedications = useStaggeredFadeIn(
+    medications.length,
+    activeTab === "medications"
+  );
+  const animatedReports = useStaggeredFadeIn(
+    reports.length,
+    activeTab === "reports"
+  );
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'history', label: 'History' },
-    { id: 'medications', label: 'Medications' },
-    { id: 'reports', label: 'Reports' },
+    { id: "overview", label: "Overview" },
+    { id: "history", label: "History" },
+    { id: "medications", label: "Medications" },
+    { id: "reports", label: "Reports" },
   ];
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <LinearGradient 
-        colors={['#3b82f6', '#9333ea']}
+      <LinearGradient
+        colors={["#3b82f6", "#9333ea"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -108,10 +167,10 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Patient Details</Text>
         </View>
-        
+
         <View style={styles.patientHeader}>
           <View style={styles.patientAvatarContainer}>
-            <Image 
+            <Image
               source={{ uri: patient.avatar }}
               style={styles.patientAvatar}
             />
@@ -119,7 +178,9 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
           <View style={styles.patientInfo}>
             <Text style={styles.patientName}>{patient.name}</Text>
             <Text style={styles.patientCondition}>{patient.condition}</Text>
-            <Text style={styles.patientId}>ID: {patient.id}2345 • {patient.room}</Text>
+            <Text style={styles.patientId}>
+              ID: {patient.id}2345 • {patient.room}
+            </Text>
           </View>
         </View>
       </LinearGradient>
@@ -132,15 +193,14 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
               <TouchableOpacity
                 key={tab.id}
                 onPress={() => setActiveTab(tab.id)}
-                style={[
-                  styles.tab,
-                  activeTab === tab.id && styles.tabActive
-                ]}
+                style={[styles.tab, activeTab === tab.id && styles.tabActive]}
               >
-                <Text style={[
-                  styles.tabText,
-                  activeTab === tab.id && styles.tabTextActive
-                ]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab.id && styles.tabTextActive,
+                  ]}
+                >
                   {tab.label}
                 </Text>
               </TouchableOpacity>
@@ -151,28 +211,30 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
 
       {/* Content */}
       <ScrollView style={styles.content}>
-        {activeTab === 'overview' && (
+        {activeTab === "overview" && (
           <View style={styles.section}>
             {/* Vitals */}
             <View style={styles.sectionBlock}>
               <Text style={styles.sectionTitle}>Vitals</Text>
               <View style={styles.vitalsGrid}>
-                {mockVitals.map((vital, index) => {
+                {vitals.map((vital, index) => {
                   const Icon = vital.icon;
                   return (
-                    <Animated.View 
-                      key={vital.label} 
+                    <Animated.View
+                      key={vital.label}
                       style={[
-                        styles.vitalCard, 
+                        styles.vitalCard,
                         {
                           opacity: animatedVitals[index],
-                          transform: [{
-                            translateY: animatedVitals[index].interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [10, 0]
-                            })
-                          }]
-                        }
+                          transform: [
+                            {
+                              translateY: animatedVitals[index].interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [10, 0],
+                              }),
+                            },
+                          ],
+                        },
                       ]}
                     >
                       <View style={styles.vitalCardContent}>
@@ -191,49 +253,63 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
             {/* Quick Actions */}
             <View style={styles.sectionBlock}>
               <Text style={styles.sectionTitle}>Quick Actions</Text>
-              <TouchableOpacity style={[styles.actionCard, styles.actionCardBlue]}>
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardBlue]}
+              >
                 <Calendar size={20} color="#2563eb" />
                 <View style={styles.actionContent}>
                   <Text style={styles.actionTitle}>Schedule Appointment</Text>
-                  <Text style={styles.actionSubtitle}>Next available: Tomorrow 2:30 PM</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Next available: Tomorrow 2:30 PM
+                  </Text>
                 </View>
               </TouchableOpacity>
-              
-              <TouchableOpacity style={[styles.actionCard, styles.actionCardGreen]}>
+
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardGreen]}
+              >
                 <Activity size={20} color="#16a34a" />
                 <View style={styles.actionContent}>
                   <Text style={styles.actionTitle}>Generate Report</Text>
-                  <Text style={styles.actionSubtitle}>Create new assessment report</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Create new assessment report
+                  </Text>
                 </View>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {activeTab === 'medications' && (
+        {activeTab === "medications" && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Current Medications</Text>
-            {mockMedications.map((medication, index) => (
+            {medications.map((medication, index) => (
               <Animated.View
                 key={medication.name}
                 style={[
                   styles.medicationCard,
                   {
                     opacity: animatedMedications[index],
-                    transform: [{
-                      translateY: animatedMedications[index].interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [10, 0]
-                      })
-                    }]
-                  }
+                    transform: [
+                      {
+                        translateY: animatedMedications[index].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [10, 0],
+                        }),
+                      },
+                    ],
+                  },
                 ]}
               >
                 <View>
                   <Text style={styles.medicationName}>{medication.name}</Text>
-                  <Text style={styles.medicationDosage}>{medication.dosage}</Text>
+                  <Text style={styles.medicationDosage}>
+                    {medication.dosage}
+                  </Text>
                   <View style={styles.medicationType}>
-                    <Text style={styles.medicationTypeText}>{medication.type}</Text>
+                    <Text style={styles.medicationTypeText}>
+                      {medication.type}
+                    </Text>
                   </View>
                 </View>
               </Animated.View>
@@ -241,7 +317,7 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
           </View>
         )}
 
-        {activeTab === 'reports' && (
+        {activeTab === "reports" && (
           <View style={styles.section}>
             <View style={styles.reportsHeader}>
               <Text style={styles.sectionTitle}>Generated Reports</Text>
@@ -249,20 +325,22 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
                 <Text style={styles.newReportText}>New Report</Text>
               </TouchableOpacity>
             </View>
-            {mockReports.map((report, index) => (
+            {reports.map((report, index) => (
               <Animated.View
                 key={report.id}
                 style={[
                   styles.reportCard,
                   {
                     opacity: animatedReports[index],
-                    transform: [{
-                      translateY: animatedReports[index].interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [10, 0]
-                      })
-                    }]
-                  }
+                    transform: [
+                      {
+                        translateY: animatedReports[index].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [10, 0],
+                        }),
+                      },
+                    ],
+                  },
                 ]}
               >
                 <Text style={styles.reportTitle}>{report.title}</Text>
@@ -278,7 +356,7 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
           </View>
         )}
 
-        {activeTab === 'history' && (
+        {activeTab === "history" && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Medical History</Text>
             <View style={styles.emptyState}>
@@ -296,7 +374,7 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({ patient, o
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc', // slate-50
+    backgroundColor: "#f8fafc", // slate-50
   },
   header: {
     paddingTop: 60,
@@ -304,8 +382,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
     marginBottom: 16,
   },
@@ -314,71 +392,71 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   headerTitle: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 0.3,
   },
   patientHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
   },
   patientAvatarContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    overflow: 'hidden',
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    overflow: "hidden",
   },
   patientAvatar: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   patientInfo: {
     flex: 1,
   },
   patientName: {
     fontSize: 20,
-    fontWeight: '600',
-    color: 'white',
+    fontWeight: "600",
+    color: "white",
     marginBottom: 4,
   },
   patientCondition: {
     fontSize: 14,
-    color: '#dbeafe', // blue-100
+    color: "#dbeafe", // blue-100
     marginBottom: 4,
   },
   patientId: {
     fontSize: 12,
-    color: '#c7d2fe', // blue-200
+    color: "#c7d2fe", // blue-200
   },
   tabsContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0', // slate-200
+    borderBottomColor: "#e2e8f0", // slate-200
   },
   tabs: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 16,
     gap: 24,
   },
   tab: {
     paddingVertical: 16,
     borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: '#3b82f6', // blue-500
+    borderBottomColor: "#3b82f6", // blue-500
   },
   tabText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#64748b', // slate-500
+    fontWeight: "500",
+    color: "#64748b", // slate-500
   },
   tabTextActive: {
-    color: '#2563eb', // blue-600
-    fontWeight: '600',
+    color: "#2563eb", // blue-600
+    fontWeight: "600",
   },
   content: {
     flex: 1,
@@ -391,44 +469,44 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b', // slate-800
+    fontWeight: "600",
+    color: "#1e293b", // slate-800
     marginBottom: 16,
   },
   vitalsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     margin: -6, // Negative margin for gap
   },
   vitalCard: {
-    width: '50%',
+    width: "50%",
     padding: 6,
   },
   vitalCardContent: {
-    backgroundColor: '#f8fafc', // slate-50
+    backgroundColor: "#f8fafc", // slate-50
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0', // slate-200
+    borderColor: "#e2e8f0", // slate-200
   },
   vitalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginBottom: 8,
   },
   vitalLabel: {
     fontSize: 12,
-    color: '#64748b', // slate-600
+    color: "#64748b", // slate-600
   },
   vitalValue: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1e293b', // slate-800
+    fontWeight: "600",
+    color: "#1e293b", // slate-800
   },
   actionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     borderRadius: 16,
     borderWidth: 2,
@@ -436,121 +514,121 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionCardBlue: {
-    backgroundColor: '#eff6ff', // blue-50
-    borderColor: '#bfdbfe', // blue-200
+    backgroundColor: "#eff6ff", // blue-50
+    borderColor: "#bfdbfe", // blue-200
   },
   actionCardGreen: {
-    backgroundColor: '#f0fdf4', // green-50
-    borderColor: '#bbf7d0', // green-200
+    backgroundColor: "#f0fdf4", // green-50
+    borderColor: "#bbf7d0", // green-200
   },
   actionContent: {
     flex: 1,
   },
   actionTitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
     marginBottom: 2,
   },
   actionSubtitle: {
     fontSize: 13,
-    color: '#64748b',
+    color: "#64748b",
   },
   medicationCard: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: "#e2e8f0",
     marginBottom: 12,
   },
   medicationName: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
     marginBottom: 4,
   },
   medicationDosage: {
     fontSize: 13,
-    color: '#64748b',
+    color: "#64748b",
     marginBottom: 8,
   },
   medicationType: {
-    backgroundColor: '#dbeafe', // blue-100
+    backgroundColor: "#dbeafe", // blue-100
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   medicationTypeText: {
     fontSize: 11,
-    fontWeight: '500',
-    color: '#1e40af', // blue-700
+    fontWeight: "500",
+    color: "#1e40af", // blue-700
   },
   reportsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   newReportButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 16,
   },
   newReportText: {
-    color: 'white',
+    color: "white",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   reportCard: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: "#e2e8f0",
     marginBottom: 12,
   },
   reportTitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
     marginBottom: 8,
   },
   reportMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   reportDate: {
     fontSize: 13,
-    color: '#64748b',
+    color: "#64748b",
   },
   reportDot: {
     fontSize: 13,
-    color: '#cbd5e1',
+    color: "#cbd5e1",
   },
   reportBadge: {
-    backgroundColor: '#e2e8f0', // slate-200
+    backgroundColor: "#e2e8f0", // slate-200
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
   },
   reportBadgeText: {
     fontSize: 11,
-    fontWeight: '500',
-    color: '#475569', // slate-600
+    fontWeight: "500",
+    color: "#475569", // slate-600
   },
   emptyState: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
     borderRadius: 16,
     padding: 24,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
+    color: "#64748b",
+    textAlign: "center",
   },
 });

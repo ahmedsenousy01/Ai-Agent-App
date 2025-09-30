@@ -23,8 +23,8 @@ import {
   ChevronDown,
 } from "lucide-react-native";
 import { Report } from "../types";
-import { ReportService } from "../services/reportService";
 import { PatientService } from "../services/patientService";
+import { useReports } from "../hooks/useDataStore";
 
 interface ReportCardProps {
   report: Report;
@@ -267,18 +267,10 @@ export const ReportsScreen: React.FC<{
     "all"
   );
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [reports, setReports] = useState<Report[]>([]);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
 
-  // Load reports from service
-  useEffect(() => {
-    const loadReports = () => {
-      const allReports = ReportService.listReports();
-      setReports(allReports);
-    };
-
-    loadReports();
-  }, []);
+  // Use the hook to get reports with automatic updates
+  const reports = useReports();
 
   useEffect(() => {
     Animated.spring(dropdownAnim, {

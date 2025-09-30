@@ -42,7 +42,8 @@ export const AudioPlaybackScreen: React.FC = () => {
   };
 
   const getSavedRecordings = async (): Promise<AudioRecording[]> => {
-    // Mock implementation - in a real app, this would load from storage
+    // TODO: Implement real storage using AsyncStorage or database
+    // For now, return empty array until real storage is implemented
     return [];
   };
 

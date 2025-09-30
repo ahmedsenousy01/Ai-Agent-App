@@ -21,29 +21,13 @@ import { useAudioRecording, audioService } from "./src/services/audioService";
 import { initializeAgent } from "./src/ai/agent";
 import { dataStore } from "./src/data/dataStore";
 import { appConfig } from "./src/config/appConfig";
+import { useDataStore } from "./src/hooks/useDataStore";
 
 type Page = "home" | "patients" | "reports" | "settings" | "audio-playback";
 
 // Use processing steps from config
 const processingSteps = appConfig.ui.processingSteps;
 const editingSteps = appConfig.ui.editingSteps;
-
-const mockTasks = [
-  "Retrieved comprehensive patient profile for John Smith including medical history, current medications, and recent lab results",
-  "Generated detailed health assessment report with blood pressure trends, medication compliance analysis, and care recommendations",
-  "Successfully scheduled follow-up cardiology appointment for next Tuesday at 2:30 PM with Dr. Martinez",
-  "Completed medication adherence review - identified potential drug interactions and updated dosage recommendations",
-  "Analyzed latest diagnostic imaging results and compiled differential diagnosis with treatment pathway options",
-  "Prepared comprehensive discharge summary with post-care instructions and follow-up scheduling",
-];
-
-const mockEditTasks = [
-  "Updated report with revised clinical findings and improved formatting",
-  "Enhanced report with additional diagnostic details and corrected terminology",
-  "Revised report to include updated patient status and treatment recommendations",
-  "Modified report with improved clarity and added missing lab values",
-  "Updated report with corrected dosages and enhanced care plan details",
-];
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>("home");
@@ -52,6 +36,19 @@ export default function App() {
 
   // Initialize audio recording hook
   const audioRecording = useAudioRecording();
+
+  // Subscribe to data store changes to keep selectedPatient in sync
+  useDataStore();
+
+  // Update selectedPatient when data changes
+  useEffect(() => {
+    if (selectedPatient) {
+      const updatedPatient = dataStore.getPatient(selectedPatient.id);
+      if (updatedPatient) {
+        setSelectedPatient(updatedPatient);
+      }
+    }
+  }); // This will run on every render, which happens when data store changes
 
   const [state, setState] = useState<AppState>("idle");
   const [currentStatus, setCurrentStatus] = useState("");

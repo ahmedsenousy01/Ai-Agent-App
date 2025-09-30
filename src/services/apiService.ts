@@ -1,6 +1,7 @@
 import { AudioData } from "../utils/audioUtils";
 import { AppContext, VoiceServiceResponse } from "../types";
 import Constants from "expo-constants";
+import { dataStore } from "../data/dataStore";
 
 export class APIService {
   private static instance: APIService;
@@ -158,6 +159,14 @@ export class APIService {
           result.error
         );
         throw new Error(result.error || "Unknown API error");
+      }
+
+      // Sync updated data with client-side data store
+      if (result.updatedContext) {
+        console.log(
+          "🔵 [APIService] Syncing updated context with client data store"
+        );
+        this.syncDataStore(result.updatedContext);
       }
 
       const finalResult = {
@@ -407,6 +416,16 @@ When processing audio commands:
 5. Handle errors gracefully and suggest alternatives when needed
 
 Remember: You are working with real medical data, so accuracy and safety are paramount.`;
+  }
+
+  private syncDataStore(updatedContext: AppContext): void {
+    console.log("🔵 [APIService] Starting data store sync");
+    try {
+      dataStore.syncFromServer(updatedContext);
+      console.log("🔵 [APIService] Data store sync completed successfully");
+    } catch (error) {
+      console.error("🔴 [APIService] Error syncing data store:", error);
+    }
   }
 }
 

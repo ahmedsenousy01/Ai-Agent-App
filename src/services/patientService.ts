@@ -1,4 +1,4 @@
-import { Patient, ID } from "../types";
+import { Patient, ID, PatientCreate, PatientUpdate } from "../types";
 import { dataStore } from "../data/dataStore";
 
 export class PatientService {
@@ -15,10 +15,7 @@ export class PatientService {
     return dataStore.searchPatients(query, room, condition, isUrgent);
   }
 
-  static updatePatient(
-    patientId: ID,
-    updates: Partial<Patient>
-  ): Patient | null {
+  static updatePatient(patientId: ID, updates: PatientUpdate): Patient | null {
     const result = dataStore.updatePatient(patientId, updates);
     if (result) {
       dataStore.saveToStorage();
@@ -26,7 +23,7 @@ export class PatientService {
     return result;
   }
 
-  static createPatient(patientData: Omit<Patient, "id">): Patient {
+  static createPatient(patientData: PatientCreate): Patient {
     const result = dataStore.createPatient(patientData);
     dataStore.saveToStorage();
     return result;
