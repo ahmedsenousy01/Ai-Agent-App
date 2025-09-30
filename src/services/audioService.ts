@@ -121,15 +121,21 @@ export const useAudioRecording = () => {
 
       console.log(`Recording stopped. Duration: ${duration}ms, URI: ${uri}`);
 
-      // For web compatibility, also provide a blob
+      // Create a blob for AI processing
       let blob: Blob | undefined;
-      if (typeof window !== "undefined" && window.fetch) {
-        try {
-          const response = await fetch(uri);
+      try {
+        // Try to create blob from URI using fetch
+        const response = await fetch(uri);
+        if (response.ok) {
           blob = await response.blob();
-        } catch (fetchError) {
-          console.warn("Could not create blob from URI:", fetchError);
+        } else {
+          console.warn("Failed to fetch audio URI:", response.status);
         }
+      } catch (fetchError) {
+        console.warn("Could not create blob from URI:", fetchError);
+        // Fallback: create a minimal blob with the URI as reference
+        // This is a workaround for React Native environments
+        blob = new Blob([uri], { type: "audio/m4a" });
       }
 
       return { uri, blob };

@@ -1,5 +1,7 @@
 import { AppContext, VoiceServiceResponse, InteractionLog } from "../types";
 import { dataStore } from "../data/dataStore";
+import { getAIService } from "./aiService";
+import { AudioData } from "../utils/audioUtils";
 
 export class MedicalAIAgent {
   private apiKey: string;
@@ -9,7 +11,7 @@ export class MedicalAIAgent {
   }
 
   async processAudio(
-    audioBlob: Blob,
+    audioData: AudioData,
     context: AppContext
   ): Promise<VoiceServiceResponse> {
     const startTime = new Date().toISOString();
@@ -25,68 +27,30 @@ export class MedicalAIAgent {
     };
 
     try {
-      // For now, simulate AI processing with mock responses
-      // In a real implementation, this would call the actual AI service
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate processing time
-
-      // Mock response based on current screen
-      let summary = "Task completed successfully";
-      let toolCalls: Array<{ tool: string; args: any; result?: any }> = [];
-
-      if (context.currentScreen === "patients") {
-        summary = "Updated patient information successfully";
-        toolCalls = [
-          {
-            tool: "updatePatient",
-            args: { patientId: "patient-001", updates: { room: "201" } },
-            result: { success: true },
-          },
-        ];
-      } else if (context.currentScreen === "patient-details") {
-        summary = "Added new medication to patient record";
-        toolCalls = [
-          {
-            tool: "addMedication",
-            args: {
-              patientId: context.currentPatient?.id,
-              name: "Lisinopril",
-              dosage: "10mg daily",
-            },
-            result: { success: true },
-          },
-        ];
-      } else if (context.currentScreen === "reports") {
-        summary = "Generated new medical report";
-        toolCalls = [
-          {
-            tool: "createReport",
-            args: { patientId: context.currentPatient?.id, type: "Assessment" },
-            result: { success: true },
-          },
-        ];
-      }
+      // Use the real AI service instead of mock responses
+      const aiService = getAIService();
+      const result = await aiService.processAudio(audioData, context);
 
       // Update interaction log
       interactionLog.finishedAt = new Date().toISOString();
-      interactionLog.intent = this.determineIntent(toolCalls);
-      interactionLog.summary = summary;
-      interactionLog.success = true;
-      interactionLog.toolCalls = toolCalls.map((tc) => ({
+      interactionLog.intent = this.determineIntent(result.toolCalls);
+      interactionLog.summary = result.summary;
+      interactionLog.success = result.success;
+      interactionLog.toolCalls = result.toolCalls.map((tc) => ({
         tool: tc.tool,
         args: tc.args,
         result: tc.result,
         at: new Date().toISOString(),
       }));
 
+      if (!result.success && result.error) {
+        interactionLog.error = result.error;
+      }
+
       // Save interaction log
       dataStore.addInteractionLog(interactionLog);
 
-      return {
-        summary,
-        status: "completed",
-        toolCalls,
-        success: true,
-      };
+      return result;
     } catch (error) {
       console.error("AI processing error:", error);
 
@@ -155,8 +119,15 @@ export class MedicalAIAgent {
 // Export singleton instance (will be initialized with API key)
 export let medicalAgent: MedicalAIAgent | null = null;
 
-export const initializeAgent = (apiKey: string): MedicalAIAgent => {
-  medicalAgent = new MedicalAIAgent(apiKey);
+export const initializeAgent = (apiKey?: string): MedicalAIAgent => {
+  // Initialize AI services first
+  const { initializeAIService } = require("./aiService");
+  const { initializeStreamingAIService } = require("./streamingAIService");
+
+  initializeAIService(apiKey);
+  initializeStreamingAIService(apiKey);
+
+  medicalAgent = new MedicalAIAgent(apiKey || "mock-api-key");
   return medicalAgent;
 };
 

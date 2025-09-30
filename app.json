@@ -11,9 +11,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aiagent.medical"
@@ -26,10 +24,10 @@
       "package": "com.aiagent.medical"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "server"
     },
-    "plugins": [
-      "expo-font"
-    ]
+    "plugins": ["expo-font", "expo-router"]
   }
 }

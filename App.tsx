@@ -142,11 +142,17 @@ export default function App() {
       // Get the actual audio recording
       const audioResult = await voiceService.stopRecording();
 
-      if (!audioResult || !audioResult.blob) {
+      if (!audioResult) {
         throw new Error("No audio recording available");
       }
 
-      const result = await voiceService.processAudio(audioResult.blob, context);
+      // Create AudioData object for processing
+      const audioData = {
+        uri: audioResult.uri,
+        blob: audioResult.blob,
+      };
+
+      const result = await voiceService.processAudio(audioData, context);
 
       if (result.success) {
         setCurrentStatus("Task completed");

@@ -1,6 +1,7 @@
 import { VoiceServiceResponse, AppContext } from "../types";
-import { getAgent } from "../ai/agent";
 import { audioService } from "./audioService";
+import { apiService } from "./apiService";
+import { AudioData } from "../utils/audioUtils";
 
 export class VoiceService {
   private static instance: VoiceService;
@@ -24,7 +25,7 @@ export class VoiceService {
   }
 
   async processAudio(
-    audioBlob: Blob,
+    audioData: AudioData,
     context: AppContext
   ): Promise<VoiceServiceResponse> {
     if (this.isProcessing) {
@@ -40,8 +41,8 @@ export class VoiceService {
     this.isProcessing = true;
 
     try {
-      const agent = getAgent();
-      const result = await agent.processAudio(audioBlob, context);
+      // Use API service to process audio
+      const result = await apiService.processAudio(audioData, context);
       return result;
     } catch (error) {
       console.error("Voice service error:", error);
