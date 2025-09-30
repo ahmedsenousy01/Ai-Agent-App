@@ -1,70 +1,95 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import { DashboardScreen } from './src/screens/DashboardScreen';
-import { PatientsScreen } from './src/screens/PatientsScreen';
-import { ReportsScreen } from './src/screens/ReportsScreen';
-import { PatientDetailsScreen } from './src/screens/PatientDetailsScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
-import { FloatingAvatar } from './src/components/FloatingAvatar';
-import { Patient, Report, AppState } from './src/types';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+} from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
+import { DashboardScreen } from "./src/screens/DashboardScreen";
+import { PatientsScreen } from "./src/screens/PatientsScreen";
+import { ReportsScreen } from "./src/screens/ReportsScreen";
+import { PatientDetailsScreen } from "./src/screens/PatientDetailsScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { AudioPlaybackScreen } from "./src/screens/AudioPlaybackScreen";
+import { FloatingAvatar } from "./src/components/FloatingAvatar";
+import { Patient, Report, AppState, AppContext } from "./src/types";
+import { voiceService } from "./src/services/voiceService";
+import { useAudioRecording, audioService } from "./src/services/audioService";
+import { initializeAgent } from "./src/ai/agent";
+import { dataStore } from "./src/data/dataStore";
+import { appConfig } from "./src/config/appConfig";
 
-type Page = 'home' | 'patients' | 'reports' | 'settings';
+type Page = "home" | "patients" | "reports" | "settings" | "audio-playback";
 
-const processingSteps = [
-  'Processing request...',
-  'Getting patient profile...',
-  'Accessing medical records...',
-  'Generating report...',
-  'Finalizing results...'
-];
-
-const editingSteps = [
-  'Processing edit request...',
-  'Analyzing current report...',
-  'Applying modifications...',
-  'Validating changes...',
-  'Updating report...'
-];
+// Use processing steps from config
+const processingSteps = appConfig.ui.processingSteps;
+const editingSteps = appConfig.ui.editingSteps;
 
 const mockTasks = [
-  'Retrieved comprehensive patient profile for John Smith including medical history, current medications, and recent lab results',
-  'Generated detailed health assessment report with blood pressure trends, medication compliance analysis, and care recommendations',
-  'Successfully scheduled follow-up cardiology appointment for next Tuesday at 2:30 PM with Dr. Martinez',
-  'Completed medication adherence review - identified potential drug interactions and updated dosage recommendations',
-  'Analyzed latest diagnostic imaging results and compiled differential diagnosis with treatment pathway options',
-  'Prepared comprehensive discharge summary with post-care instructions and follow-up scheduling'
+  "Retrieved comprehensive patient profile for John Smith including medical history, current medications, and recent lab results",
+  "Generated detailed health assessment report with blood pressure trends, medication compliance analysis, and care recommendations",
+  "Successfully scheduled follow-up cardiology appointment for next Tuesday at 2:30 PM with Dr. Martinez",
+  "Completed medication adherence review - identified potential drug interactions and updated dosage recommendations",
+  "Analyzed latest diagnostic imaging results and compiled differential diagnosis with treatment pathway options",
+  "Prepared comprehensive discharge summary with post-care instructions and follow-up scheduling",
 ];
 
 const mockEditTasks = [
-  'Updated report with revised clinical findings and improved formatting',
-  'Enhanced report with additional diagnostic details and corrected terminology',
-  'Revised report to include updated patient status and treatment recommendations',
-  'Modified report with improved clarity and added missing lab values',
-  'Updated report with corrected dosages and enhanced care plan details'
+  "Updated report with revised clinical findings and improved formatting",
+  "Enhanced report with additional diagnostic details and corrected terminology",
+  "Revised report to include updated patient status and treatment recommendations",
+  "Modified report with improved clarity and added missing lab values",
+  "Updated report with corrected dosages and enhanced care plan details",
 ];
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [currentPage, setCurrentPage] = useState<Page>("home");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  
-  const [state, setState] = useState<AppState>('idle');
-  const [currentStatus, setCurrentStatus] = useState('');
-  const [processedTask, setProcessedTask] = useState('');
+
+  // Initialize audio recording hook
+  const audioRecording = useAudioRecording();
+
+  const [state, setState] = useState<AppState>("idle");
+  const [currentStatus, setCurrentStatus] = useState("");
+  const [processedTask, setProcessedTask] = useState("");
   const [editingReport, setEditingReport] = useState<Report | null>(null);
-  
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Sidebar animations - recreate on each toggle to ensure fresh animations
   const sidebarSlideAnim = useRef(new Animated.Value(-280)).current;
   const backdropFadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Initialize the app
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        // Initialize the AI agent with API key from config
+        initializeAgent(appConfig.googleGeminiApiKey);
+        setIsInitialized(true);
+      } catch (error) {
+        console.error("Failed to initialize app:", error);
+        setIsInitialized(true); // Still allow the app to run
+      }
+    };
+
+    initializeApp();
+  }, []);
+
+  // Initialize audio service with the hook
+  useEffect(() => {
+    audioService.setHook(audioRecording);
+  }, [audioRecording]);
 
   useEffect(() => {
     if (sidebarOpen) {
       // Reset to start positions
       sidebarSlideAnim.setValue(-280);
       backdropFadeAnim.setValue(0);
-      
+
       // Animate IN
       Animated.parallel([
         Animated.spring(sidebarSlideAnim, {
@@ -97,60 +122,114 @@ export default function App() {
     }
   }, [sidebarOpen]);
 
-  const simulateProcessing = async (recordingTime: number) => {
-    setState('processing');
-    
-    const steps = editingReport ? editingSteps : processingSteps;
-    const minProcessingTime = editingReport ? 
-      Math.max(recordingTime * 0.3, 3000) : 
-      Math.max(recordingTime * 0.4, 4000);
-    const stepDuration = minProcessingTime / steps.length;
-    
-    for (let i = 0; i < steps.length; i++) {
-      setCurrentStatus(steps[i]);
-      const duration = stepDuration + Math.random() * 600;
-      await new Promise(resolve => setTimeout(resolve, duration));
+  const processVoiceCommand = async (recordingTime: number) => {
+    if (!isInitialized) {
+      setCurrentStatus("App not initialized yet");
+      return;
     }
-    
-    setCurrentStatus(editingReport ? 'Edit completed' : 'Task completed');
-    
-    const tasks = editingReport ? mockEditTasks : mockTasks;
-    const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
-    setProcessedTask(randomTask);
-    
-    setTimeout(() => {
-      setState('complete');
-      
-      setTimeout(() => {
-        setState('showing-summary');
-        
+
+    setState("processing");
+    setCurrentStatus("Processing voice command...");
+
+    try {
+      // Get app context
+      const context: AppContext = dataStore.getAppContext(
+        currentPage,
+        selectedPatient?.id,
+        editingReport?.id
+      );
+
+      // Get the actual audio recording
+      const audioResult = await voiceService.stopRecording();
+
+      if (!audioResult || !audioResult.blob) {
+        throw new Error("No audio recording available");
+      }
+
+      const result = await voiceService.processAudio(audioResult.blob, context);
+
+      if (result.success) {
+        setCurrentStatus("Task completed");
+        setProcessedTask(result.summary);
+
         setTimeout(() => {
-          setState(editingReport ? 'editing' : 'idle');
-          setCurrentStatus('');
-          setProcessedTask('');
+          setState("complete");
+
+          setTimeout(() => {
+            setState("showing-summary");
+
+            setTimeout(() => {
+              setState(editingReport ? "editing" : "idle");
+              setCurrentStatus("");
+              setProcessedTask("");
+            }, 3000);
+          }, 2000);
+        }, 1200);
+      } else {
+        setCurrentStatus("Error processing command");
+        setProcessedTask(result.error || "Unknown error occurred");
+
+        setTimeout(() => {
+          setState(editingReport ? "editing" : "idle");
+          setCurrentStatus("");
+          setProcessedTask("");
         }, 3000);
+      }
+    } catch (error) {
+      console.error("Voice processing error:", error);
+      setCurrentStatus("Error processing command");
+      setProcessedTask("Failed to process voice command");
+
+      setTimeout(() => {
+        setState(editingReport ? "editing" : "idle");
+        setCurrentStatus("");
+        setProcessedTask("");
+      }, 3000);
+    }
+  };
+
+  const handleRecordingStart = async () => {
+    try {
+      const success = await voiceService.startRecording();
+      if (success) {
+        setState("recording");
+        setCurrentStatus("Listening...");
+      } else {
+        setCurrentStatus("Failed to start recording");
+        setTimeout(() => {
+          setState(editingReport ? "editing" : "idle");
+          setCurrentStatus("");
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      setCurrentStatus("Error starting recording");
+      setTimeout(() => {
+        setState(editingReport ? "editing" : "idle");
+        setCurrentStatus("");
       }, 2000);
-    }, 1200);
+    }
   };
 
-  const handleRecordingStart = () => {
-    setState('recording');
-    setCurrentStatus('Listening...');
-  };
-
-  const handleRecordingStop = (recordingTime: number) => {
+  const handleRecordingStop = async (recordingTime: number) => {
     if (recordingTime >= 800) {
-      simulateProcessing(recordingTime);
+      processVoiceCommand(recordingTime);
     } else {
-      setState(editingReport ? 'editing' : 'idle');
-      setCurrentStatus('');
+      // Stop recording even if it was too short
+      try {
+        await voiceService.stopRecording();
+      } catch (error) {
+        console.error("Error stopping recording:", error);
+      }
+      setState(editingReport ? "editing" : "idle");
+      setCurrentStatus("");
     }
   };
 
   const handleNewTask = () => {
-    setState(editingReport ? 'editing' : 'idle');
-    setCurrentStatus('');
-    setProcessedTask('');
+    setState(editingReport ? "editing" : "idle");
+    setCurrentStatus("");
+    setProcessedTask("");
   };
 
   const handleNavigate = (page: Page) => {
@@ -169,39 +248,46 @@ export default function App() {
 
   const handleEditReport = (report: Report) => {
     setEditingReport(report);
-    setState('editing');
+    setState("editing");
   };
 
   const handleEditComplete = () => {
     setEditingReport(null);
-    setState('idle');
-    setCurrentStatus('');
-    setProcessedTask('');
+    setState("idle");
+    setCurrentStatus("");
+    setProcessedTask("");
   };
 
   const getPageTitle = () => {
-    if (selectedPatient) return 'Patient Details';
+    if (selectedPatient) return "Patient Details";
     switch (currentPage) {
-      case 'home': return 'Home';
-      case 'patients': return 'Patients';
-      case 'reports': return 'Reports';
-      case 'settings': return 'Settings';
-      default: return 'Home';
+      case "home":
+        return "Home";
+      case "patients":
+        return "Patients";
+      case "reports":
+        return "Reports";
+      case "settings":
+        return "Settings";
+      case "audio-playback":
+        return "Audio Playback";
+      default:
+        return "Home";
     }
   };
 
   const renderContent = () => {
     if (selectedPatient) {
       return (
-        <PatientDetailsScreen 
-          patient={selectedPatient} 
+        <PatientDetailsScreen
+          patient={selectedPatient}
           onBack={handlePatientBack}
         />
       );
     }
 
     switch (currentPage) {
-      case 'home':
+      case "home":
         return (
           <DashboardScreen
             state={state}
@@ -212,12 +298,14 @@ export default function App() {
             onNewTask={handleNewTask}
           />
         );
-      case 'patients':
+      case "patients":
         return <PatientsScreen onPatientSelect={handlePatientSelect} />;
-      case 'reports':
+      case "reports":
         return <ReportsScreen onEditReport={handleEditReport} />;
-      case 'settings':
+      case "settings":
         return <SettingsScreen />;
+      case "audio-playback":
+        return <AudioPlaybackScreen />;
       default:
         return null;
     }
@@ -226,9 +314,9 @@ export default function App() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      
+
       {/* Header (shown on non-home pages) */}
-      {(currentPage !== 'home' || selectedPatient) && (
+      {(currentPage !== "home" || selectedPatient) && (
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => setSidebarOpen(!sidebarOpen)}
@@ -242,7 +330,7 @@ export default function App() {
       )}
 
       {/* Home Header (only on home) */}
-      {currentPage === 'home' && !selectedPatient && (
+      {currentPage === "home" && !selectedPatient && (
         <View style={styles.homeHeader}>
           <TouchableOpacity
             onPress={() => setSidebarOpen(!sidebarOpen)}
@@ -258,23 +346,21 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <View style={styles.content}>
-        {renderContent()}
-      </View>
+      <View style={styles.content}>{renderContent()}</View>
 
       {/* Footer (only shown on home) */}
-      {currentPage === 'home' && !selectedPatient && (
+      {currentPage === "home" && !selectedPatient && (
         <View style={styles.footer}>
           <View style={styles.badge}>
-            <View style={[styles.dot, { backgroundColor: '#10b981' }]} />
+            <View style={[styles.dot, { backgroundColor: "#10b981" }]} />
             <Text style={styles.badgeText}>SECURE</Text>
           </View>
           <View style={styles.badge}>
-            <View style={[styles.dot, { backgroundColor: '#3b82f6' }]} />
+            <View style={[styles.dot, { backgroundColor: "#3b82f6" }]} />
             <Text style={styles.badgeText}>HIPAA COMPLIANT</Text>
           </View>
           <View style={styles.badge}>
-            <View style={[styles.dot, { backgroundColor: '#8b5cf6' }]} />
+            <View style={[styles.dot, { backgroundColor: "#8b5cf6" }]} />
             <Text style={styles.badgeText}>ENCRYPTED</Text>
           </View>
         </View>
@@ -282,7 +368,12 @@ export default function App() {
 
       {/* Floating Avatar (visible on all pages except home and settings) */}
       <FloatingAvatar
-        isVisible={currentPage !== 'home' && currentPage !== 'settings' && !selectedPatient}
+        isVisible={
+          currentPage !== "home" &&
+          currentPage !== "settings" &&
+          currentPage !== "audio-playback" &&
+          !selectedPatient
+        }
         onRecordingStart={handleRecordingStart}
         onRecordingStop={handleRecordingStop}
         state={state}
@@ -296,7 +387,7 @@ export default function App() {
         <>
           <Animated.View
             style={[styles.backdrop, { opacity: backdropFadeAnim }]}
-            pointerEvents={sidebarOpen ? 'auto' : 'none'}
+            pointerEvents={sidebarOpen ? "auto" : "none"}
           >
             <TouchableOpacity
               style={StyleSheet.absoluteFill}
@@ -304,7 +395,12 @@ export default function App() {
               activeOpacity={1}
             />
           </Animated.View>
-          <Animated.View style={[styles.sidebar, { transform: [{ translateX: sidebarSlideAnim }] }]}>
+          <Animated.View
+            style={[
+              styles.sidebar,
+              { transform: [{ translateX: sidebarSlideAnim }] },
+            ]}
+          >
             <View style={styles.sidebarHeader}>
               <View style={styles.logoContainer}>
                 <Text style={styles.logoEmoji}>🏥</Text>
@@ -317,28 +413,35 @@ export default function App() {
 
             <View style={styles.nav}>
               {[
-                { id: 'home', label: 'Home', icon: 'home' },
-                { id: 'patients', label: 'Patients', icon: 'people' },
-                { id: 'reports', label: 'Reports', icon: 'document-text' },
-                { id: 'settings', label: 'Settings', icon: 'settings' },
+                { id: "home", label: "Home", icon: "home" },
+                { id: "patients", label: "Patients", icon: "people" },
+                { id: "reports", label: "Reports", icon: "document-text" },
+                {
+                  id: "audio-playback",
+                  label: "Audio Playback",
+                  icon: "musical-notes",
+                },
+                { id: "settings", label: "Settings", icon: "settings" },
               ].map((item) => (
                 <TouchableOpacity
                   key={item.id}
                   style={[
                     styles.navItem,
-                    currentPage === item.id && styles.navItemActive
+                    currentPage === item.id && styles.navItemActive,
                   ]}
                   onPress={() => handleNavigate(item.id as Page)}
                 >
                   <Ionicons
                     name={item.icon as any}
                     size={20}
-                    color={currentPage === item.id ? '#3b82f6' : '#64748b'}
+                    color={currentPage === item.id ? "#3b82f6" : "#64748b"}
                   />
-                  <Text style={[
-                    styles.navText,
-                    currentPage === item.id && styles.navTextActive
-                  ]}>
+                  <Text
+                    style={[
+                      styles.navText,
+                      currentPage === item.id && styles.navTextActive,
+                    ]}
+                  >
                     {item.label}
                   </Text>
                 </TouchableOpacity>
@@ -371,18 +474,18 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: "#e2e8f0",
   },
   homeHeader: {
     paddingTop: 60,
@@ -395,62 +498,62 @@ const styles = StyleSheet.create({
   hamburger: {
     width: 24,
     height: 24,
-    justifyContent: 'center',
+    justifyContent: "center",
     gap: 4,
   },
   hamburgerLine: {
     width: 24,
     height: 2,
-    backgroundColor: '#475569',
+    backgroundColor: "#475569",
     borderRadius: 1,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
   },
   content: {
     flex: 1,
   },
   backdrop: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     zIndex: 50,
   },
   sidebar: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     bottom: 0,
     width: 280,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     zIndex: 51,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 10,
   },
   sidebarHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 20,
     paddingTop: 60,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: "#e2e8f0",
   },
   logoContainer: {
     width: 32,
     height: 32,
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoEmoji: {
     fontSize: 20,
@@ -459,8 +562,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
     letterSpacing: 1,
   },
   nav: {
@@ -469,35 +572,35 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 12,
     borderRadius: 12,
     gap: 12,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
   navItemActive: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
   },
   navText: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#64748b',
+    fontWeight: "500",
+    color: "#64748b",
   },
   navTextActive: {
-    color: '#3b82f6',
+    color: "#3b82f6",
   },
   sidebarFooter: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: "#e2e8f0",
   },
   profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
     borderRadius: 12,
     padding: 12,
     gap: 12,
@@ -507,56 +610,56 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#10b981',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#10b981",
+    alignItems: "center",
+    justifyContent: "center",
   },
   profileDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'white',
+    backgroundColor: "white",
   },
   profileName: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
   },
   profileRole: {
     fontSize: 11,
-    color: '#64748b',
+    color: "#64748b",
   },
   statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   onlineDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10b981',
+    backgroundColor: "#10b981",
   },
   statusText: {
     fontSize: 11,
-    color: '#64748b',
-    fontWeight: '500',
+    color: "#64748b",
+    fontWeight: "500",
   },
   statusId: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: "#94a3b8",
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: 24,
     paddingBottom: 24,
     gap: 16,
   },
   badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   dot: {
@@ -566,8 +669,8 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 11,
-    color: '#64748b',
-    fontWeight: '600',
+    color: "#64748b",
+    fontWeight: "600",
     letterSpacing: 1,
   },
 });

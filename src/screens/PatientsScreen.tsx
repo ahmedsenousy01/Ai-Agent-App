@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,64 +9,10 @@ import {
   Pressable,
   FlatList,
   Image,
-} from 'react-native';
-import { Search, Plus, ChevronRight, AlertCircle } from 'lucide-react-native';
-import { Patient } from '../types';
-// We'll use a simple View as a placeholder for the image for now.
-// In a real app, you'd use a component like React Native's Image.
-
-const mockPatients: Patient[] = [
-    {
-    id: '1',
-    name: 'Ethan Carter',
-    room: 'Room 201',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
-    isUrgent: true,
-    lastVisit: '2 hours ago',
-    condition: 'Cardiology'
-  },
-  {
-    id: '2',
-    name: 'Olivia Bennett',
-    room: 'Room 202',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
-    lastVisit: '4 hours ago',
-    condition: 'General Medicine'
-  },
-  {
-    id: '3',
-    name: 'Noah Thompson',
-    room: 'Room 203',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
-    lastVisit: '1 day ago',
-    condition: 'Orthopedics'
-  },
-  {
-    id: '4',
-    name: 'Ava Martinez',
-    room: 'Room 204',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
-    isUrgent: true,
-    lastVisit: '30 minutes ago',
-    condition: 'Emergency'
-  },
-  {
-    id: '5',
-    name: 'Liam Harris',
-    room: 'Room 205',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
-    lastVisit: '6 hours ago',
-    condition: 'Pediatrics'
-  },
-  {
-    id: '6',
-    name: 'Isabella Clark',
-    room: 'Room 206',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face',
-    lastVisit: '3 days ago',
-    condition: 'Dermatology'
-  }
-];
+} from "react-native";
+import { Search, ChevronRight, AlertCircle } from "lucide-react-native";
+import { Patient } from "../types";
+import { PatientService } from "../services/patientService";
 
 interface PatientCardProps {
   patient: Patient;
@@ -74,7 +20,11 @@ interface PatientCardProps {
   onPress: () => void;
 }
 
-const PatientCard: React.FC<PatientCardProps> = ({ patient, index, onPress }) => {
+const PatientCard: React.FC<PatientCardProps> = ({
+  patient,
+  index,
+  onPress,
+}) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -115,29 +65,26 @@ const PatientCard: React.FC<PatientCardProps> = ({ patient, index, onPress }) =>
   };
 
   return (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.patientCard,
         {
           opacity: fadeAnim,
-          transform: [
-            { translateY: slideAnim },
-            { scale: scaleAnim }
-          ]
-        }
+          transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+        },
       ]}
     >
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [
           styles.patientCard,
-          pressed && styles.patientCardPressed
+          pressed && styles.patientCardPressed,
         ]}
       >
         {/* Avatar */}
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
-            <Image 
+            <Image
               source={{ uri: patient.avatar }}
               style={styles.avatarImage}
             />
@@ -153,7 +100,7 @@ const PatientCard: React.FC<PatientCardProps> = ({ patient, index, onPress }) =>
         <View style={styles.patientInfo}>
           <Text style={styles.patientName}>{patient.name}</Text>
           <View style={styles.infoRow}>
-            <Text style={styles.infoText}>{patient.room}</Text>
+            <Text style={styles.infoText}>Room {patient.room}</Text>
             <Text style={styles.infoDot}>•</Text>
             <Text style={styles.infoText}>{patient.condition}</Text>
           </View>
@@ -167,14 +114,23 @@ const PatientCard: React.FC<PatientCardProps> = ({ patient, index, onPress }) =>
   );
 };
 
-export const PatientsScreen: React.FC<{ onPatientSelect: (patient: Patient) => void }> = ({ 
-  onPatientSelect 
-}) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'urgent'>('all');
-  
-  // The filtering logic is good and doesn't need changes.
-  
+export const PatientsScreen: React.FC<{
+  onPatientSelect: (patient: Patient) => void;
+}> = ({ onPatientSelect }) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<"all" | "urgent">("all");
+  const [patients, setPatients] = useState<Patient[]>([]);
+
+  // Load patients from service
+  useEffect(() => {
+    const loadPatients = () => {
+      const allPatients = PatientService.searchPatients();
+      setPatients(allPatients);
+    };
+
+    loadPatients();
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* Search Bar */}
@@ -194,19 +150,38 @@ export const PatientsScreen: React.FC<{ onPatientSelect: (patient: Patient) => v
       {/* Filters */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
-          style={[styles.filterButton, activeFilter === 'all' && styles.filterButtonAllActive]}
-          onPress={() => setActiveFilter('all')}
+          style={[
+            styles.filterButton,
+            activeFilter === "all" && styles.filterButtonAllActive,
+          ]}
+          onPress={() => setActiveFilter("all")}
         >
-          <Text style={[styles.filterText, activeFilter === 'all' && styles.filterTextActive]}>
+          <Text
+            style={[
+              styles.filterText,
+              activeFilter === "all" && styles.filterTextActive,
+            ]}
+          >
             All
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, activeFilter === 'urgent' && styles.filterButtonUrgentActive]}
-          onPress={() => setActiveFilter('urgent')}
+          style={[
+            styles.filterButton,
+            activeFilter === "urgent" && styles.filterButtonUrgentActive,
+          ]}
+          onPress={() => setActiveFilter("urgent")}
         >
-          <AlertCircle size={16} color={activeFilter === 'urgent' ? 'white' : '#64748b'} />
-          <Text style={[styles.filterText, activeFilter === 'urgent' && styles.filterTextActive]}>
+          <AlertCircle
+            size={16}
+            color={activeFilter === "urgent" ? "white" : "#64748b"}
+          />
+          <Text
+            style={[
+              styles.filterText,
+              activeFilter === "urgent" && styles.filterTextActive,
+            ]}
+          >
             Urgent
           </Text>
         </TouchableOpacity>
@@ -214,12 +189,14 @@ export const PatientsScreen: React.FC<{ onPatientSelect: (patient: Patient) => v
 
       {/* Patient List */}
       <FlatList
-        data={mockPatients.filter(patient => {
-          const matchesSearch = patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                               patient.room.toLowerCase().includes(searchQuery.toLowerCase());
-          const matchesFilter = activeFilter === 'all' || 
-                               (activeFilter === 'urgent' && patient.isUrgent);
-          
+        data={patients.filter((patient) => {
+          const matchesSearch =
+            patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            patient.room.toLowerCase().includes(searchQuery.toLowerCase());
+          const matchesFilter =
+            activeFilter === "all" ||
+            (activeFilter === "urgent" && patient.isUrgent);
+
           return matchesSearch && matchesFilter;
         })}
         renderItem={({ item, index }) => (
@@ -229,7 +206,7 @@ export const PatientsScreen: React.FC<{ onPatientSelect: (patient: Patient) => v
             onPress={() => onPatientSelect(item)}
           />
         )}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -247,23 +224,23 @@ export const PatientsScreen: React.FC<{ onPatientSelect: (patient: Patient) => v
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc', // slate-50
+    backgroundColor: "#f8fafc", // slate-50
   },
   searchContainer: {
     padding: 16,
     paddingBottom: 12,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: "#e2e8f0",
   },
   searchInputContainer: {
-    position: 'relative',
-    width: '100%',
+    position: "relative",
+    width: "100%",
   },
   searchIcon: {
-    position: 'absolute',
+    position: "absolute",
     left: 14,
-    top: '50%',
+    top: "50%",
     marginTop: -9,
     zIndex: 1,
   },
@@ -271,70 +248,70 @@ const styles = StyleSheet.create({
     paddingLeft: 44,
     paddingRight: 16,
     paddingVertical: 12,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: "#e2e8f0",
     fontSize: 15,
-    color: '#1e293b',
+    color: "#1e293b",
   },
   filterContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderColor: '#e2e8f0', // slate-200
+    borderColor: "#e2e8f0", // slate-200
     gap: 8,
   },
   filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 16,
     gap: 6,
   },
   filterButtonAll: {
-    backgroundColor: '#f1f5f9', // slate-100
+    backgroundColor: "#f1f5f9", // slate-100
   },
   filterButtonAllActive: {
-    backgroundColor: '#3b82f6', // blue-500
+    backgroundColor: "#3b82f6", // blue-500
   },
   filterButtonUrgent: {
-    backgroundColor: '#f1f5f9', // slate-100
+    backgroundColor: "#f1f5f9", // slate-100
   },
   filterButtonUrgentActive: {
-    backgroundColor: '#ef4444', // red-500
+    backgroundColor: "#ef4444", // red-500
   },
   filterText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#334155', // slate-700
+    fontWeight: "500",
+    color: "#334155", // slate-700
   },
   filterTextActive: {
-    color: 'white',
+    color: "white",
   },
   listContent: {
     padding: 16,
     gap: 12,
   },
   patientCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0', // slate-200
+    borderColor: "#e2e8f0", // slate-200
     gap: 12,
   },
   patientCardPressed: {
-    borderColor: '#93c5fd', // blue-300
-    backgroundColor: '#f8fafc'
+    borderColor: "#93c5fd", // blue-300
+    backgroundColor: "#f8fafc",
   },
   avatarContainer: {
-    position: 'relative',
+    position: "relative",
     width: 48,
     height: 48,
   },
@@ -342,69 +319,69 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#e2e8f0', // slate-200
-    overflow: 'hidden',
+    backgroundColor: "#e2e8f0", // slate-200
+    overflow: "hidden",
   },
   avatarImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   urgentBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: -2,
     right: -2,
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#ef4444', // red-500
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#ef4444", // red-500
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: "white",
   },
   patientInfo: {
     flex: 1,
   },
   patientName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b', // slate-800
+    fontWeight: "600",
+    color: "#1e293b", // slate-800
   },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginTop: 4,
   },
   infoText: {
     fontSize: 13,
-    color: '#64748b', // slate-500
+    color: "#64748b", // slate-500
   },
   infoDot: {
-    color: '#cbd5e1', // slate-300
+    color: "#cbd5e1", // slate-300
   },
   lastVisit: {
     fontSize: 12,
-    color: '#94a3b8', // slate-400
+    color: "#94a3b8", // slate-400
     marginTop: 4,
   },
   emptyContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 60,
   },
   emptyIconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#e2e8f0', // slate-200
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#e2e8f0", // slate-200
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 16,
   },
   emptyText: {
     fontSize: 16,
-    color: '#64748b', // slate-500
+    color: "#64748b", // slate-500
   },
 });
