@@ -61,19 +61,56 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({
   // Status dot pulse
   const statusDotAnim = useRef(new Animated.Value(1)).current;
 
+  // Keep references to looping animations so we can stop them cleanly
+  const loopsRef = useRef<{
+    recordingPulse1: Animated.CompositeAnimation | null;
+    recordingPulse2: Animated.CompositeAnimation | null;
+    processingPulse: Animated.CompositeAnimation | null;
+    loaderRotate: Animated.CompositeAnimation | null;
+    statusDot: Animated.CompositeAnimation | null;
+  }>({
+    recordingPulse1: null,
+    recordingPulse2: null,
+    processingPulse: null,
+    loaderRotate: null,
+    statusDot: null,
+  });
+
+  // Track long-running non-loop sequences to prevent stacking
+  const sequencesRef = useRef<{
+    complete: Animated.CompositeAnimation | null;
+  }>({ complete: null });
+
+  // Bubble shown ref to avoid stale closure inside animation callbacks
+  const bubbleShownRef = useRef(bubbleShown);
+  useEffect(() => {
+    bubbleShownRef.current = bubbleShown;
+  }, [bubbleShown]);
+
+  const stopAllLoops = () => {
+    const current = loopsRef.current;
+    Object.values(current).forEach((anim) => {
+      if (anim && typeof anim.stop === "function") anim.stop();
+    });
+    loopsRef.current = {
+      recordingPulse1: null,
+      recordingPulse2: null,
+      processingPulse: null,
+      loaderRotate: null,
+      statusDot: null,
+    };
+  };
+
   // Main animation controller
   useEffect(() => {
-    // Stop all animations
-    [
-      pulseAnim1,
-      pulseAnim2,
-      processingPulseAnim,
-      statusDotAnim,
-      loaderRotate,
-    ].forEach((anim) => {
-      anim.stopAnimation();
-      anim.setValue(0);
-    });
+    // Stop any existing loops so they don't stack across state changes
+    stopAllLoops();
+
+    // Also stop any long-running sequences that could still be in-flight
+    if (sequencesRef.current.complete) {
+      sequencesRef.current.complete.stop();
+      sequencesRef.current.complete = null;
+    }
 
     if (isRecording) {
       // Idle OUT, Recording IN
@@ -91,19 +128,27 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({
       ]).start();
 
       // Recording pulse rings
-      const pulse = (anim: Animated.Value, delay = 0) => {
-        setTimeout(() => {
-          Animated.loop(
-            Animated.timing(anim, {
-              toValue: 1,
-              duration: 2000,
-              useNativeDriver: true,
-            })
-          ).start();
-        }, delay);
-      };
-      pulse(pulseAnim1);
-      pulse(pulseAnim2, 500);
+      pulseAnim1.setValue(0);
+      pulseAnim2.setValue(0);
+      loopsRef.current.recordingPulse1 = Animated.loop(
+        Animated.timing(pulseAnim1, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        })
+      );
+      loopsRef.current.recordingPulse2 = Animated.loop(
+        Animated.sequence([
+          Animated.delay(500),
+          Animated.timing(pulseAnim2, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      loopsRef.current.recordingPulse1.start();
+      loopsRef.current.recordingPulse2.start();
     } else if (isProcessing) {
       // Recording OUT, Processing IN
       Animated.parallel([
@@ -120,7 +165,8 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({
       ]).start();
 
       // Processing pulse
-      Animated.loop(
+      processingPulseAnim.setValue(0);
+      loopsRef.current.processingPulse = Animated.loop(
         Animated.sequence([
           Animated.timing(processingPulseAnim, {
             toValue: 1,
@@ -133,23 +179,26 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      loopsRef.current.processingPulse.start();
 
       // Loader rotation
-      Animated.loop(
+      loaderRotate.setValue(0);
+      loopsRef.current.loaderRotate = Animated.loop(
         Animated.timing(loaderRotate, {
           toValue: 1,
           duration: 1000,
           useNativeDriver: true,
         })
-      ).start();
+      );
+      loopsRef.current.loaderRotate.start();
     } else if (isComplete) {
       // Processing OUT to LEFT, Check IN from LEFT
       checkIconScale.setValue(0);
       checkIconRotate.setValue(0);
       bubbleAnim.setValue(0);
 
-      Animated.sequence([
+      const sequence = Animated.sequence([
         Animated.parallel([
           Animated.timing(processingAnim, {
             toValue: 0,
@@ -180,9 +229,13 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({
         ]),
         // Wait 3 seconds before showing bubble
         Animated.delay(3000),
-      ]).start(() => {
+      ]);
+
+      sequencesRef.current.complete = sequence;
+      sequence.start(() => {
+        sequencesRef.current.complete = null;
         // After 3 seconds, shrink avatar and show speech bubble
-        if (isShowingSummary && !bubbleShown) {
+        if (isShowingSummary && !bubbleShownRef.current) {
           setBubbleShown(true);
           Animated.parallel([
             Animated.spring(avatarShrinkAnim, {
@@ -253,9 +306,10 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({
       checkIconScale.setValue(0);
     }
 
-    // Status dot pulse
+    // Status dot pulse (do not reset to 0 to avoid jump)
     if (isRecording || isProcessing || isComplete || isShowingSummary) {
-      Animated.loop(
+      statusDotAnim.setValue(1);
+      loopsRef.current.statusDot = Animated.loop(
         Animated.sequence([
           Animated.timing(statusDotAnim, {
             toValue: 1.2,
@@ -268,8 +322,18 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      loopsRef.current.statusDot.start();
     }
+
+    // Cleanup on unmount/state change
+    return () => {
+      stopAllLoops();
+      if (sequencesRef.current.complete) {
+        sequencesRef.current.complete.stop();
+        sequencesRef.current.complete = null;
+      }
+    };
   }, [isRecording, isProcessing, isComplete, isShowingSummary]);
 
   const handlePressIn = () => {
