@@ -16,13 +16,6 @@ export async function POST(request: Request): Promise<Response> {
     Object.fromEntries(request.headers.entries())
   );
 
-  // Add timeout wrapper for the entire request processing
-  const timeoutPromise = new Promise<Response>((_, reject) => {
-    setTimeout(() => {
-      reject(new Error("Request processing timeout after 25 seconds"));
-    }, 25000); // 25 second timeout
-  });
-
   const processRequest = async (): Promise<Response> => {
     try {
       console.log("🟢 [API Route] Parsing request body...");
@@ -119,7 +112,7 @@ export async function POST(request: Request): Promise<Response> {
             content: [
               {
                 type: "text",
-                text: "Please process this audio command and execute the appropriate medical operations using the available data and tools.",
+                text: "Please process this audio command and execute the appropriate medical operations using the available data and tools. IMPORTANT: If the command asks you to update, create, or modify any data, you MUST use the provided tools to actually make those changes. Do not just describe what you would do - execute the tools to make real changes.",
               },
               {
                 type: "file",
@@ -161,6 +154,20 @@ export async function POST(request: Request): Promise<Response> {
           "🟢 [API Route] Tool results found, count:",
           toolResults?.length || 0
         );
+
+        // Debug: Log what the AI actually decided to do
+        console.log("🟢 [API Route] AI Response Analysis:", {
+          fullResponseLength: fullResponse.length,
+          fullResponsePreview: fullResponse.substring(0, 200) + "...",
+          hasToolResults: !!toolResults && toolResults.length > 0,
+          toolResultsDetails:
+            toolResults?.map((tr) => ({
+              toolName: tr.toolName,
+              hasInput: !!tr.input,
+              hasOutput: !!tr.output,
+              isDynamic: tr.dynamic,
+            })) || [],
+        });
 
         if (toolResults && toolResults.length > 0) {
           console.log("🟢 [API Route] Processing tool results...");
@@ -249,8 +256,7 @@ export async function POST(request: Request): Promise<Response> {
     }
   };
 
-  // Race between processing and timeout
-  return Promise.race([processRequest(), timeoutPromise]);
+  return await processRequest();
 }
 
 function generateEnhancedSystemPrompt(
@@ -378,6 +384,7 @@ You have access to the following medical tools to perform operations on the data
 - listReports(patientId?, status?): List medical reports
 - getReport(reportId): Get specific report
 - createReport(reportData): Create new medical report
+- generateAIReport(patientId, reportType, additionalContext?): Generate comprehensive AI-powered medical report
 - updateReport(reportId, updates): Update existing report
 - approveReport(reportId): Approve a report
 - exportReportPDF(reportId): Export report as PDF
@@ -399,6 +406,8 @@ Based on the available data, you can handle commands like:
 - "Add medication Metformin 500mg twice daily for patient ID abc123"
 - "Show me all urgent patients"
 - "Create a discharge report for Sarah Johnson"
+- "Generate an assessment report for John Smith"
+- "Generate a comprehensive treatment report for patient in room 101"
 - "Schedule an appointment for Mike Davis tomorrow at 2 PM"
 - "Record vitals for patient in room 101: blood pressure 120/80, heart rate 72"
 - "Approve report rep456"
@@ -407,13 +416,26 @@ Based on the available data, you can handle commands like:
 
 ## IMPORTANT INSTRUCTIONS
 
-1. **Use the actual data**: Always reference the real patient names, IDs, and data provided in the context above
-2. **Be specific**: When updating data, use exact patient IDs and provide complete information
-3. **Confirm actions**: Always confirm what you've done and provide feedback about the results
-4. **Handle errors gracefully**: If a patient ID doesn't exist or data is missing, explain clearly
-5. **Maintain privacy**: Be professional and maintain patient confidentiality in all responses
+1. **ALWAYS USE TOOLS**: When asked to update, create, or modify data, you MUST use the appropriate tools. Do not just describe what you would do - actually execute the tools.
+2. **Use the actual data**: Always reference the real patient names, IDs, and data provided in the context above
+3. **Be specific**: When updating data, use exact patient IDs and provide complete information
+4. **Execute then confirm**: First use the tools to make changes, then confirm what you've done based on the tool results
+5. **Handle errors gracefully**: If a patient ID doesn't exist or data is missing, explain clearly
+6. **Maintain privacy**: Be professional and maintain patient confidentiality in all responses
 
-Remember: You are working with real medical data, so accuracy and safety are paramount. Always double-check patient information before making changes.`;
+## TOOL USAGE EXAMPLES
+
+For "Update John Smith's room to 203":
+1. First use searchPatients to find John Smith's ID (e.g., returns ID "pat123")
+2. Then use updatePatient with: { patientId: "pat123", room: "203" }
+3. Confirm the change was made successfully
+
+For "Add medication for patient in room 101":
+1. Use searchPatients to find patient in room 101
+2. Use addMedication with the patient ID and medication details
+3. Confirm the medication was added
+
+Remember: You are working with real medical data, so accuracy and safety are paramount. Always double-check patient information before making changes, and ALWAYS use the tools to make actual changes.`;
 
   console.log("🟢 [API Route] Enhanced system prompt generated successfully");
   return enhancedPrompt;

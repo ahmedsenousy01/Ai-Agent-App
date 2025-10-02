@@ -5,6 +5,7 @@ import { ReportService } from "../services/reportService";
 import { VitalService } from "../services/vitalService";
 import { MedicationService } from "../services/medicationService";
 import { AppointmentService } from "../services/appointmentService";
+import { aiReportService } from "../services/aiReportService";
 import {
   ID,
   ISODate,
@@ -87,6 +88,37 @@ export const medicalTools = {
     return ReportService.createReport(reportData);
   },
 
+  generateAIReport: async (
+    patientId: ID,
+    reportType: string,
+    additionalContext?: string
+  ) => {
+    const patient = PatientService.getPatient(patientId);
+    if (!patient) {
+      throw new Error(`Patient with ID ${patientId} not found`);
+    }
+
+    // Generate AI content
+    const aiContent = await aiReportService.generateReportContent(
+      patient,
+      reportType,
+      additionalContext
+    );
+
+    // Create the report with AI-generated content
+    const reportData: ReportCreate = {
+      patientId,
+      title: `${reportType} Report - ${patient.name}`,
+      type: reportType as any,
+      date: new Date().toISOString(),
+      generatedBy: "AI Assistant",
+      status: "Generated",
+      content: aiContent,
+    };
+
+    return ReportService.createReport(reportData);
+  },
+
   updateReport: async (reportId: ID, updates: ReportUpdate) => {
     return ReportService.updateReport(reportId, updates);
   },
@@ -159,12 +191,34 @@ export const createAITools = () => {
     }),
 
     updatePatient: tool({
-      description: "Update patient information",
-      inputSchema: z
-        .object({
-          patientId: z.string().describe("The patient ID"),
-        })
-        .and(schemas.PatientUpdate),
+      description:
+        "Update patient information including room, condition, demographics, etc.",
+      inputSchema: z.object({
+        patientId: z.string().describe("The patient ID"),
+        room: z.string().optional().describe("Patient's room number"),
+        name: z.string().optional().describe("Patient's name"),
+        condition: z
+          .string()
+          .optional()
+          .describe("Patient's medical condition"),
+        isUrgent: z.boolean().optional().describe("Whether patient is urgent"),
+        age: z.number().optional().describe("Patient's age"),
+        gender: z
+          .enum(["Male", "Female", "Other"])
+          .optional()
+          .describe("Patient's gender"),
+        phone: z.string().optional().describe("Patient's phone number"),
+        email: z.string().optional().describe("Patient's email"),
+        emergencyContact: z
+          .string()
+          .optional()
+          .describe("Emergency contact info"),
+        allergies: z.array(z.string()).optional().describe("Patient allergies"),
+        medicalHistory: z
+          .array(z.string())
+          .optional()
+          .describe("Medical history"),
+      }),
       execute: async (data) => {
         const { patientId, ...updates } = data;
         return await medicalTools.updatePatient(patientId, updates);
@@ -191,12 +245,34 @@ export const createAITools = () => {
     }),
 
     updateVitals: tool({
-      description: "Update patient vital signs",
-      inputSchema: z
-        .object({
-          patientId: z.string().describe("The patient ID"),
-        })
-        .and(schemas.VitalUpdate),
+      description:
+        "Update patient vital signs including heart rate, blood pressure, temperature, etc.",
+      inputSchema: z.object({
+        patientId: z.string().describe("The patient ID"),
+        heartRate: z
+          .string()
+          .optional()
+          .describe("Heart rate (e.g., '72 bpm')"),
+        bloodPressure: z
+          .string()
+          .optional()
+          .describe("Blood pressure (e.g., '120/80 mmHg')"),
+        temperature: z
+          .string()
+          .optional()
+          .describe("Temperature (e.g., '98.6°F')"),
+        respiratoryRate: z
+          .string()
+          .optional()
+          .describe("Respiratory rate (e.g., '16 breaths/min')"),
+        oxygenSaturation: z
+          .string()
+          .optional()
+          .describe("Oxygen saturation (e.g., '98%')"),
+        weight: z.string().optional().describe("Weight (e.g., '180 lbs')"),
+        height: z.string().optional().describe("Height (e.g., '5'10\"')"),
+        bmi: z.string().optional().describe("BMI (e.g., '25.8')"),
+      }),
       execute: async (data) => {
         const { patientId, ...updates } = data;
         return await medicalTools.updateVitals(patientId, updates);
@@ -230,11 +306,22 @@ export const createAITools = () => {
 
     addMedication: tool({
       description: "Add a new medication for a patient",
-      inputSchema: z
-        .object({
-          patientId: z.string().describe("The patient ID"),
-        })
-        .and(schemas.MedicationCreate.omit({ patientId: true })),
+      inputSchema: z.object({
+        patientId: z.string().describe("The patient ID"),
+        name: z.string().describe("Medication name (e.g., 'Metformin')"),
+        dosage: z
+          .string()
+          .describe("Dosage and frequency (e.g., '500mg twice daily')"),
+        type: z.string().describe("Medication type (e.g., 'ACE Inhibitor')"),
+        startedAt: z.string().optional().describe("Start date (ISO format)"),
+        endedAt: z.string().optional().describe("End date (ISO format)"),
+        active: z
+          .boolean()
+          .default(true)
+          .describe("Whether medication is active (default: true)"),
+        prescribedBy: z.string().optional().describe("Prescribing doctor"),
+        instructions: z.string().optional().describe("Special instructions"),
+      }),
       execute: async (data) => {
         const { patientId, ...medicationData } = data;
         return await medicalTools.addMedication(patientId, {
@@ -246,11 +333,26 @@ export const createAITools = () => {
 
     updateMedication: tool({
       description: "Update an existing medication",
-      inputSchema: z
-        .object({
-          medId: z.string().describe("The medication ID"),
-        })
-        .and(schemas.MedicationUpdate),
+      inputSchema: z.object({
+        medId: z.string().describe("The medication ID"),
+        name: z
+          .string()
+          .optional()
+          .describe("Medication name (e.g., 'Metformin')"),
+        dosage: z
+          .string()
+          .optional()
+          .describe("Dosage and frequency (e.g., '500mg twice daily')"),
+        type: z
+          .string()
+          .optional()
+          .describe("Medication type (e.g., 'ACE Inhibitor')"),
+        startedAt: z.string().optional().describe("Start date (ISO format)"),
+        endedAt: z.string().optional().describe("End date (ISO format)"),
+        active: z.boolean().optional().describe("Whether medication is active"),
+        prescribedBy: z.string().optional().describe("Prescribing doctor"),
+        instructions: z.string().optional().describe("Special instructions"),
+      }),
       execute: async (data) => {
         const { medId, ...updates } = data;
         return await medicalTools.updateMedication(medId, updates);
@@ -297,13 +399,75 @@ export const createAITools = () => {
       },
     }),
 
+    generateAIReport: tool({
+      description:
+        "Generate a comprehensive medical report using AI based on patient data, history, vitals, and medications",
+      inputSchema: z.object({
+        patientId: z.string().describe("The patient ID"),
+        reportType: z
+          .enum([
+            "Assessment",
+            "Lab Report",
+            "Treatment",
+            "Discharge",
+            "Follow-up",
+          ])
+          .describe("Type of report to generate"),
+        additionalContext: z
+          .string()
+          .optional()
+          .describe(
+            "Additional context or specific focus for the report (e.g., 'focus on cardiac symptoms', 'post-surgery follow-up')"
+          ),
+      }),
+      execute: async ({ patientId, reportType, additionalContext }) => {
+        return await medicalTools.generateAIReport(
+          patientId,
+          reportType,
+          additionalContext
+        );
+      },
+    }),
+
     updateReport: tool({
       description: "Update an existing medical report",
-      inputSchema: z
-        .object({
-          reportId: z.string().describe("The report ID"),
-        })
-        .and(schemas.ReportUpdate),
+      inputSchema: z.object({
+        reportId: z.string().describe("The report ID"),
+        patientId: z.string().optional().describe("The patient ID"),
+        title: z.string().optional().describe("Report title"),
+        type: z
+          .enum([
+            "Assessment",
+            "Lab Report",
+            "Treatment",
+            "Discharge",
+            "Follow-up",
+          ])
+          .optional()
+          .describe("Report type"),
+        date: z.string().optional().describe("Report date (ISO format)"),
+        generatedBy: z
+          .enum(["AI Assistant", "Manual Entry"])
+          .optional()
+          .describe("How report was generated"),
+        status: z
+          .enum(["Generated", "Reviewed", "Approved"])
+          .optional()
+          .describe("Report status"),
+        content: z
+          .object({
+            chiefComplaint: z.string().optional(),
+            history: z.string().optional(),
+            vitalsSummary: z.string().optional(),
+            labsSummary: z.string().optional(),
+            assessment: z.string().optional(),
+            plan: z.string().optional(),
+            notes: z.string().optional(),
+            markdown: z.string().optional(),
+          })
+          .optional()
+          .describe("Report content sections"),
+      }),
       execute: async (data) => {
         const { reportId, ...updates } = data;
         return await medicalTools.updateReport(reportId, updates);
@@ -352,11 +516,23 @@ export const createAITools = () => {
 
     updateAppointment: tool({
       description: "Update an existing appointment",
-      inputSchema: z
-        .object({
-          appointmentId: z.string().describe("The appointment ID"),
-        })
-        .and(schemas.AppointmentUpdate),
+      inputSchema: z.object({
+        appointmentId: z.string().describe("The appointment ID"),
+        patientId: z.string().optional().describe("The patient ID"),
+        scheduledFor: z
+          .string()
+          .optional()
+          .describe("Appointment date/time (ISO format)"),
+        reason: z.string().optional().describe("Reason for appointment"),
+        location: z.string().optional().describe("Appointment location"),
+        clinicianName: z.string().optional().describe("Clinician name"),
+        status: z
+          .enum(["Scheduled", "Completed", "Cancelled"])
+          .optional()
+          .describe("Appointment status"),
+        duration: z.number().optional().describe("Duration in minutes"),
+        notes: z.string().optional().describe("Appointment notes"),
+      }),
       execute: async (data) => {
         const { appointmentId, ...updates } = data;
         return await medicalTools.updateAppointment(appointmentId, updates);

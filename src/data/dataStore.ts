@@ -311,25 +311,43 @@ class DataStore {
 
   // Public method to sync data from server
   syncFromServer(updatedContext: AppContext): void {
+    console.log("🟡 [DataStore] Syncing data from server");
+    let hasChanges = false;
+
     if (updatedContext.allPatients) {
       this.patients = [...updatedContext.allPatients];
+      hasChanges = true;
     }
     if (updatedContext.allReports) {
       this.reports = [...updatedContext.allReports];
+      hasChanges = true;
     }
     if (updatedContext.allAppointments) {
       this.appointments = [...updatedContext.allAppointments];
+      hasChanges = true;
     }
     if (updatedContext.allMedications) {
       this.medications = [...updatedContext.allMedications];
+      hasChanges = true;
     }
     if (updatedContext.allVitals) {
       this.vitals = [...updatedContext.allVitals];
+      hasChanges = true;
     }
     if (updatedContext.allInteractionLogs) {
       this.interactionLogs = [...updatedContext.allInteractionLogs];
+      hasChanges = true;
     }
-    this.notifyListeners();
+
+    if (hasChanges) {
+      console.log(
+        "🟡 [DataStore] Changes detected, notifying listeners and saving to storage"
+      );
+      this.notifyListeners();
+      this.saveToStorage();
+    } else {
+      console.log("🟡 [DataStore] No changes detected in server sync");
+    }
   }
 
   // Data persistence (optional localStorage for demo)

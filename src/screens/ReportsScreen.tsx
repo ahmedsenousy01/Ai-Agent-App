@@ -24,15 +24,22 @@ import {
 } from "lucide-react-native";
 import { Report } from "../types";
 import { PatientService } from "../services/patientService";
-import { useReports } from "../hooks/useDataStore";
+import { useReports, useDataStore } from "../hooks/useDataStore";
+import { ReportViewer } from "../components/ReportViewer";
 
 interface ReportCardProps {
   report: Report;
   index: number;
   onEdit: () => void;
+  onView: () => void;
 }
 
-const ReportCard: React.FC<ReportCardProps> = ({ report, index, onEdit }) => {
+const ReportCard: React.FC<ReportCardProps> = ({
+  report,
+  index,
+  onEdit,
+  onView,
+}) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [buttonLayout, setButtonLayout] = useState({
     x: 0,
@@ -194,7 +201,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, index, onEdit }) => {
                 style={styles.dropdownItem}
                 onPress={() => {
                   setShowDropdown(false);
-                  // Handle view
+                  onView();
                 }}
               >
                 <Eye size={16} color="#2563eb" />
@@ -267,10 +274,15 @@ export const ReportsScreen: React.FC<{
     "all"
   );
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [showReportViewer, setShowReportViewer] = useState(false);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
 
   // Use the hook to get reports with automatic updates
   const reports = useReports();
+
+  // Subscribe to data store changes to ensure patient data is fresh
+  useDataStore();
 
   useEffect(() => {
     Animated.spring(dropdownAnim, {
@@ -293,6 +305,26 @@ export const ReportsScreen: React.FC<{
 
     return matchesSearch && matchesStatus;
   });
+
+  const handleViewReport = (report: Report) => {
+    setSelectedReport(report);
+    setShowReportViewer(true);
+  };
+
+  const handleCloseReportViewer = () => {
+    setShowReportViewer(false);
+    setSelectedReport(null);
+  };
+
+  const handleShareReport = () => {
+    // TODO: Implement share functionality
+    console.log("Share report:", selectedReport?.id);
+  };
+
+  const handleDownloadReport = () => {
+    // TODO: Implement download functionality
+    console.log("Download report:", selectedReport?.id);
+  };
 
   return (
     <View style={styles.container}>
@@ -430,6 +462,7 @@ export const ReportsScreen: React.FC<{
             report={item}
             index={index}
             onEdit={() => onEditReport?.(item)}
+            onView={() => handleViewReport(item)}
           />
         )}
         keyExtractor={(item) => item.id}
@@ -443,6 +476,17 @@ export const ReportsScreen: React.FC<{
           </View>
         }
       />
+
+      {/* Report Viewer Modal */}
+      {selectedReport && (
+        <ReportViewer
+          report={selectedReport}
+          visible={showReportViewer}
+          onClose={handleCloseReportViewer}
+          onShare={handleShareReport}
+          onDownload={handleDownloadReport}
+        />
+      )}
     </View>
   );
 };

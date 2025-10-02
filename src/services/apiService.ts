@@ -1,7 +1,6 @@
 import { AudioData } from "../utils/audioUtils";
 import { AppContext, VoiceServiceResponse } from "../types";
 import Constants from "expo-constants";
-import { dataStore } from "../data/dataStore";
 
 export class APIService {
   private static instance: APIService;
@@ -161,12 +160,11 @@ export class APIService {
         throw new Error(result.error || "Unknown API error");
       }
 
-      // Sync updated data with client-side data store
+      // Note: Sync will be handled by App.tsx to avoid double syncing
       if (result.updatedContext) {
         console.log(
-          "🔵 [APIService] Syncing updated context with client data store"
+          "🔵 [APIService] Updated context received, will be synced by App.tsx"
         );
-        this.syncDataStore(result.updatedContext);
       }
 
       const finalResult = {
@@ -174,6 +172,7 @@ export class APIService {
         status: result.status,
         toolCalls: result.toolCalls,
         success: result.success,
+        updatedContext: result.updatedContext, // Pass through updatedContext for App.tsx sync
       };
       console.log("🔵 [APIService] Returning successful result:", {
         summaryLength: finalResult.summary?.length,
@@ -418,15 +417,7 @@ When processing audio commands:
 Remember: You are working with real medical data, so accuracy and safety are paramount.`;
   }
 
-  private syncDataStore(updatedContext: AppContext): void {
-    console.log("🔵 [APIService] Starting data store sync");
-    try {
-      dataStore.syncFromServer(updatedContext);
-      console.log("🔵 [APIService] Data store sync completed successfully");
-    } catch (error) {
-      console.error("🔴 [APIService] Error syncing data store:", error);
-    }
-  }
+  // Removed syncDataStore method - sync is now handled only in App.tsx
 }
 
 // Export singleton instance

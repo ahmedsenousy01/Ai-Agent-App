@@ -172,6 +172,7 @@ export const VoiceServiceResponseSchema = z.object({
   ),
   success: z.boolean(),
   error: z.string().optional(),
+  updatedContext: AppContextSchema.optional(), // Include updated data for client sync
 });
 
 // Create/Update schemas for API operations

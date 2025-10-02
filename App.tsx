@@ -45,10 +45,19 @@ export default function App() {
     if (selectedPatient) {
       const updatedPatient = dataStore.getPatient(selectedPatient.id);
       if (updatedPatient) {
-        setSelectedPatient(updatedPatient);
+        // Use shallow comparison instead of JSON.stringify for better performance
+        const hasChanges = Object.keys(updatedPatient).some(
+          (key) =>
+            updatedPatient[key as keyof typeof updatedPatient] !==
+            selectedPatient[key as keyof typeof selectedPatient]
+        );
+        if (hasChanges) {
+          console.log("🟪 [App] Updating selected patient with fresh data");
+          setSelectedPatient(updatedPatient);
+        }
       }
     }
-  }); // This will run on every render, which happens when data store changes
+  }, [selectedPatient]); // Only run when selectedPatient changes
 
   const [state, setState] = useState<AppState>("idle");
   const [currentStatus, setCurrentStatus] = useState("");
@@ -208,6 +217,12 @@ export default function App() {
         console.log("🟪 [App] Processing successful, setting UI state");
         setCurrentStatus("Task completed");
         setProcessedTask(result.summary);
+
+        // Sync any updated data from the backend
+        if (result.updatedContext) {
+          console.log("🟪 [App] Syncing updated data from backend");
+          dataStore.syncFromServer(result.updatedContext);
+        }
 
         setTimeout(() => {
           setState("complete");

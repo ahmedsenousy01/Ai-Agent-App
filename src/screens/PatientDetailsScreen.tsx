@@ -19,13 +19,15 @@ import {
   Droplets,
   Weight,
   Calendar,
+  ChevronRight,
 } from "lucide-react-native";
-import { Patient } from "../types";
+import { Patient, Report } from "../types";
 import {
   usePatientVitals,
   usePatientMedications,
   usePatientReports,
 } from "../hooks/useDataStore";
+import { ReportViewer } from "../components/ReportViewer";
 
 interface PatientDetailsProps {
   patient: Patient;
@@ -71,6 +73,19 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({
   onBack,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [reportViewerVisible, setReportViewerVisible] = useState(false);
+
+  // Handle report viewing
+  const handleViewReport = (report: Report) => {
+    setSelectedReport(report);
+    setReportViewerVisible(true);
+  };
+
+  const handleCloseReportViewer = () => {
+    setReportViewerVisible(false);
+    setSelectedReport(null);
+  };
 
   // Get real data from data store with automatic updates
   const patientVitals = usePatientVitals(patient.id);
@@ -325,34 +340,51 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({
                 <Text style={styles.newReportText}>New Report</Text>
               </TouchableOpacity>
             </View>
-            {reports.map((report, index) => (
-              <Animated.View
-                key={report.id}
-                style={[
-                  styles.reportCard,
-                  {
-                    opacity: animatedReports[index],
-                    transform: [
-                      {
-                        translateY: animatedReports[index].interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [10, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <Text style={styles.reportTitle}>{report.title}</Text>
-                <View style={styles.reportMeta}>
-                  <Text style={styles.reportDate}>{report.date}</Text>
-                  <Text style={styles.reportDot}>•</Text>
-                  <View style={styles.reportBadge}>
-                    <Text style={styles.reportBadgeText}>{report.type}</Text>
-                  </View>
-                </View>
-              </Animated.View>
-            ))}
+            {reports.map((report, index) => {
+              // Find the full report object from patientReports
+              const fullReport = patientReports.find((r) => r.id === report.id);
+
+              return (
+                <Animated.View
+                  key={report.id}
+                  style={[
+                    {
+                      opacity: animatedReports[index],
+                      transform: [
+                        {
+                          translateY: animatedReports[index].interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [10, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.reportCard}
+                    onPress={() => fullReport && handleViewReport(fullReport)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.reportContent}>
+                      <View style={styles.reportInfo}>
+                        <Text style={styles.reportTitle}>{report.title}</Text>
+                        <View style={styles.reportMeta}>
+                          <Text style={styles.reportDate}>{report.date}</Text>
+                          <Text style={styles.reportDot}>•</Text>
+                          <View style={styles.reportBadge}>
+                            <Text style={styles.reportBadgeText}>
+                              {report.type}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <ChevronRight size={20} color="#94a3b8" />
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
           </View>
         )}
 
@@ -367,6 +399,23 @@ export const PatientDetailsScreen: React.FC<PatientDetailsProps> = ({
           </View>
         )}
       </ScrollView>
+
+      {/* Report Viewer Modal */}
+      {selectedReport && (
+        <ReportViewer
+          report={selectedReport}
+          visible={reportViewerVisible}
+          onClose={handleCloseReportViewer}
+          onShare={() => {
+            // TODO: Implement share functionality
+            console.log("Share report:", selectedReport.id);
+          }}
+          onDownload={() => {
+            // TODO: Implement download functionality
+            console.log("Download report:", selectedReport.id);
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -589,6 +638,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     marginBottom: 12,
+  },
+  reportContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reportInfo: {
+    flex: 1,
   },
   reportTitle: {
     fontSize: 15,
