@@ -258,10 +258,16 @@ export class AIService {
   }
 
   private async executeTool(toolName: string, args: any): Promise<any> {
-    // This method handles the actual execution of tools
-    // The tools are defined in the centralized createAITools function
-    // This is just a fallback for any additional processing needed
-    return { success: true, message: `Executed ${toolName}` };
+    // This method is no longer used since all processing happens server-side
+    // But keeping it as a fallback for any direct client-side tool execution
+    console.warn(
+      "🟡 [AIService] executeTool called on client-side - this should not happen in normal flow"
+    );
+    return {
+      success: true,
+      message: `Executed ${toolName}`,
+      note: "Client-side execution",
+    };
   }
 
   private getSystemPrompt(context: AppContext): string {

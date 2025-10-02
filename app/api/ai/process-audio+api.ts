@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { streamText } from "ai";
+import { streamText, stepCountIs } from "ai";
 
 // Import the centralized AI tools
 import { createAITools } from "../../../src/ai/tools";
@@ -130,6 +130,7 @@ export async function POST(request: Request): Promise<Response> {
           },
         ],
         tools: aiTools,
+        stopWhen: stepCountIs(5), // Allow up to 5 steps for multi-step tool calls
       });
       console.log("🟢 [API Route] AI stream initialized");
 
@@ -153,34 +154,43 @@ export async function POST(request: Request): Promise<Response> {
         const finalResult = await result;
         console.log("🟢 [API Route] Final result obtained");
 
-        // Extract and execute tool calls
-        console.log("🟢 [API Route] Extracting tool calls...");
-        const toolCallsResult = await finalResult.toolCalls;
+        // Access tool results from the final result
+        console.log("🟢 [API Route] Accessing tool results...");
+        const toolResults = await finalResult.toolResults;
         console.log(
-          "🟢 [API Route] Tool calls extracted, count:",
-          toolCallsResult?.length || 0
+          "🟢 [API Route] Tool results found, count:",
+          toolResults?.length || 0
         );
 
-        if (toolCallsResult && toolCallsResult.length > 0) {
-          console.log("🟢 [API Route] Executing tool calls...");
-          for (const toolCall of toolCallsResult) {
-            const toolName = toolCall.toolName;
-            const args = toolCall.input;
-            console.log(
-              "🟢 [API Route] Executing tool:",
-              toolName,
-              "with args:",
-              args
-            );
+        if (toolResults && toolResults.length > 0) {
+          console.log("🟢 [API Route] Processing tool results...");
+          for (const toolResult of toolResults) {
+            // Skip dynamic tools (client-side tools without execute function)
+            if (toolResult.dynamic) {
+              console.log(
+                "🟢 [API Route] Skipping dynamic tool:",
+                toolResult.toolName
+              );
+              continue;
+            }
 
-            // Tool execution is handled by the AI SDK through createAITools
-            // No additional processing needed here
-            console.log("🟢 [API Route] Tool executed successfully:", toolName);
+            const toolName = toolResult.toolName;
+            const args = toolResult.input;
+            const result = toolResult.output;
+
+            console.log(
+              "🟢 [API Route] Tool executed successfully:",
+              toolName,
+              "Input:",
+              args,
+              "Output:",
+              result
+            );
 
             toolCalls.push({
               tool: toolName,
               args,
-              result: { success: true },
+              result,
             });
           }
         }
