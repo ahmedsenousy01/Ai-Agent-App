@@ -107,20 +107,14 @@ export class APIService {
       console.log("🔵 [APIService] Base URL:", this.baseUrl);
       console.log("🔵 [APIService] Full URL:", apiUrl);
 
-      // Make the API request with proper timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
+      // Make the API request
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestPayload),
-        signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       console.log("🔵 [APIService] Response received:", {
         status: response.status,
@@ -192,10 +186,7 @@ export class APIService {
       // Handle specific error types
       let errorMessage = "Failed to process voice command. Please try again.";
       if (error instanceof Error) {
-        if (error.name === "AbortError") {
-          errorMessage =
-            "Request timed out. Please try again with a shorter audio clip.";
-        } else if (error.message.includes("fetch")) {
+        if (error.message.includes("fetch")) {
           errorMessage =
             "Network error. Please check your connection and try again.";
         } else {

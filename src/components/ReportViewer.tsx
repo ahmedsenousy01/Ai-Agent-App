@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Modal,
   Dimensions,
+  Animated,
 } from "react-native";
 import {
   FileText,
@@ -18,6 +19,7 @@ import {
   X,
   Share,
   Download,
+  Menu,
 } from "lucide-react-native";
 import Markdown from "react-native-markdown-display";
 import { Report } from "../types";
@@ -38,8 +40,44 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
   onDownload,
 }) => {
   const [activeSection, setActiveSection] = useState<string>("overview");
+  const [sheetOpen, setSheetOpen] = useState(false);
   const screenWidth = Dimensions.get("window").width;
-  const sidebarWidth = Math.min(160, screenWidth * 0.25); // Responsive sidebar width
+  const sheetWidth = Math.min(280, screenWidth * 0.75); // Responsive sheet width
+
+  // Sheet animations
+  const sheetSlideAnim = useRef(new Animated.Value(-sheetWidth)).current;
+  const backdropFadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Animate sheet open/close
+  useEffect(() => {
+    if (sheetOpen) {
+      Animated.parallel([
+        Animated.timing(sheetSlideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(backdropFadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(sheetSlideAnim, {
+          toValue: -sheetWidth,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(backdropFadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [sheetOpen, sheetWidth, sheetSlideAnim, backdropFadeAnim]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -69,15 +107,119 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
 
   const StatusIcon = getStatusIcon(report.status);
 
-  const sections = [
-    { id: "overview", label: "Overview", icon: FileText },
-    { id: "complaint", label: "Chief Complaint", icon: User },
-    { id: "history", label: "History", icon: Calendar },
-    { id: "vitals", label: "Vitals", icon: CheckCircle },
-    { id: "assessment", label: "Assessment", icon: AlertCircle },
-    { id: "plan", label: "Plan", icon: FileText },
-    { id: "notes", label: "Notes", icon: FileText },
-  ];
+  // Dynamic sections based on report type and available content
+  const getSections = () => {
+    const baseSections = [
+      { id: "overview", label: "Overview", icon: FileText },
+    ];
+
+    const content = report.content;
+
+    // Add sections based on report type and available content
+    if (report.type === "Discharge") {
+      // Discharge report sections
+      if (content?.diagnoses)
+        baseSections.push({
+          id: "diagnoses",
+          label: "Diagnoses",
+          icon: AlertCircle,
+        });
+      if (content?.therapy)
+        baseSections.push({
+          id: "therapy",
+          label: "Therapy",
+          icon: CheckCircle,
+        });
+      if (content?.histology)
+        baseSections.push({
+          id: "histology",
+          label: "Histology",
+          icon: FileText,
+        });
+      if (content?.course)
+        baseSections.push({ id: "course", label: "Course", icon: Calendar });
+      if (content?.recommendations)
+        baseSections.push({
+          id: "recommendations",
+          label: "Recommendations",
+          icon: FileText,
+        });
+      if (content?.lastMedication)
+        baseSections.push({
+          id: "lastMedication",
+          label: "Last Medication",
+          icon: FileText,
+        });
+    } else if (report.type === "Operation") {
+      // Operation report sections
+      if (content?.patientInfo)
+        baseSections.push({
+          id: "patientInfo",
+          label: "Patient Info",
+          icon: User,
+        });
+      if (content?.surgicalDiagnosis)
+        baseSections.push({
+          id: "surgicalDiagnosis",
+          label: "Surgical Diagnosis",
+          icon: AlertCircle,
+        });
+      if (content?.surgeon || content?.assistants || content?.anesthesiologist)
+        baseSections.push({
+          id: "surgicalTeam",
+          label: "Surgical Team",
+          icon: User,
+        });
+      if (content?.anesthesia)
+        baseSections.push({
+          id: "anesthesia",
+          label: "Anesthesia",
+          icon: FileText,
+        });
+      if (content?.procedure)
+        baseSections.push({
+          id: "procedure",
+          label: "Procedure",
+          icon: CheckCircle,
+        });
+      if (content?.operativeCourse)
+        baseSections.push({
+          id: "operativeCourse",
+          label: "Operative Course",
+          icon: Calendar,
+        });
+    } else {
+      // Standard report sections
+      if (content?.chiefComplaint)
+        baseSections.push({
+          id: "complaint",
+          label: "Chief Complaint",
+          icon: User,
+        });
+      if (content?.history)
+        baseSections.push({ id: "history", label: "History", icon: Calendar });
+      if (content?.vitalsSummary)
+        baseSections.push({ id: "vitals", label: "Vitals", icon: CheckCircle });
+      if (content?.assessment)
+        baseSections.push({
+          id: "assessment",
+          label: "Assessment",
+          icon: AlertCircle,
+        });
+      if (content?.plan)
+        baseSections.push({ id: "plan", label: "Plan", icon: FileText });
+      if (content?.notes)
+        baseSections.push({ id: "notes", label: "Notes", icon: FileText });
+    }
+
+    // Always add full report section if markdown is available
+    if (content?.markdown)
+      baseSections.push({ id: "full", label: "Full Report", icon: FileText });
+
+    return baseSections;
+  };
+
+  const sections = getSections();
 
   const renderSectionContent = () => {
     const content = report.content;
@@ -222,6 +364,199 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
           </View>
         );
 
+      // Discharge report sections
+      case "diagnoses":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Diagnoses</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.diagnoses || "No diagnoses recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "therapy":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Therapy</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.therapy || "No therapy information recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "histology":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Histology</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.histology || "No histology results available"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "course":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Course</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.course || "No course information recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "recommendations":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Recommendations</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.recommendations || "No recommendations provided"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "lastMedication":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Last Medication</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.lastMedication ||
+                  "No medication information recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      // Operation report sections
+      case "patientInfo":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Patient Information</Text>
+            <View style={styles.overviewGrid}>
+              {content?.patientInfo?.name && (
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewLabel}>Name</Text>
+                  <Text style={styles.overviewValue}>
+                    {content.patientInfo.name}
+                  </Text>
+                </View>
+              )}
+              {content?.patientInfo?.dateOfBirth && (
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewLabel}>Date of Birth</Text>
+                  <Text style={styles.overviewValue}>
+                    {content.patientInfo.dateOfBirth}
+                  </Text>
+                </View>
+              )}
+              {content?.patientInfo?.dateOfSurgery && (
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewLabel}>Date of Surgery</Text>
+                  <Text style={styles.overviewValue}>
+                    {content.patientInfo.dateOfSurgery}
+                  </Text>
+                </View>
+              )}
+              {content?.patientInfo?.ward && (
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewLabel}>Ward</Text>
+                  <Text style={styles.overviewValue}>
+                    {content.patientInfo.ward}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        );
+
+      case "surgicalDiagnosis":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Surgical Diagnosis</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.surgicalDiagnosis || "No surgical diagnosis recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "surgicalTeam":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Surgical Team</Text>
+            <View style={styles.overviewGrid}>
+              {content?.surgeon && (
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewLabel}>Surgeon</Text>
+                  <Text style={styles.overviewValue}>{content.surgeon}</Text>
+                </View>
+              )}
+              {content?.assistants && (
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewLabel}>Assistants</Text>
+                  <Text style={styles.overviewValue}>{content.assistants}</Text>
+                </View>
+              )}
+              {content?.anesthesiologist && (
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewLabel}>Anesthesiologist</Text>
+                  <Text style={styles.overviewValue}>
+                    {content.anesthesiologist}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        );
+
+      case "anesthesia":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Anesthesia</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.anesthesia || "No anesthesia information recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "procedure":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Procedure</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.procedure || "No procedure information recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
+      case "operativeCourse":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionTitle}>Operative Course</Text>
+            <View style={styles.markdownContainer}>
+              <Markdown style={markdownStyles}>
+                {content?.operativeCourse || "No operative course recorded"}
+              </Markdown>
+            </View>
+          </View>
+        );
+
       default:
         return null;
     }
@@ -238,6 +573,12 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
+            <TouchableOpacity
+              style={styles.sectionsButton}
+              onPress={() => setSheetOpen(true)}
+            >
+              <Menu size={20} color="#6b7280" />
+            </TouchableOpacity>
             <FileText size={24} color="#1e293b" />
             <View style={styles.headerInfo}>
               <Text style={styles.headerTitle}>{report.title}</Text>
@@ -267,48 +608,78 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
           </View>
         </View>
 
-        <View style={styles.body}>
-          {/* Sidebar */}
-          <View style={[styles.sidebar, { width: sidebarWidth }]}>
-            <ScrollView style={styles.sidebarScroll}>
-              {sections.map((section) => {
-                const SectionIcon = section.icon;
-                const isActive = activeSection === section.id;
-
-                return (
-                  <TouchableOpacity
-                    key={section.id}
-                    style={[
-                      styles.sidebarItem,
-                      isActive && styles.sidebarItemActive,
-                    ]}
-                    onPress={() => setActiveSection(section.id)}
-                  >
-                    <SectionIcon
-                      size={18}
-                      color={isActive ? "#3b82f6" : "#6b7280"}
-                    />
-                    <Text
-                      style={[
-                        styles.sidebarItemText,
-                        isActive && styles.sidebarItemTextActive,
-                      ]}
-                    >
-                      {section.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          {/* Content */}
-          <View style={styles.content}>
-            <ScrollView style={styles.contentScroll}>
-              {renderSectionContent()}
-            </ScrollView>
-          </View>
+        {/* Content - Full Width */}
+        <View style={styles.content}>
+          <ScrollView style={styles.contentScroll}>
+            {renderSectionContent()}
+          </ScrollView>
         </View>
+
+        {/* Sections Sheet */}
+        {sheetOpen && (
+          <>
+            <Animated.View
+              style={[styles.backdrop, { opacity: backdropFadeAnim }]}
+              pointerEvents={sheetOpen ? "auto" : "none"}
+            >
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                onPress={() => setSheetOpen(false)}
+                activeOpacity={1}
+              />
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.sheet,
+                {
+                  width: sheetWidth,
+                  transform: [{ translateX: sheetSlideAnim }],
+                },
+              ]}
+            >
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>Report Sections</Text>
+                <TouchableOpacity onPress={() => setSheetOpen(false)}>
+                  <X size={20} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.sheetContent}>
+                {sections.map((section) => {
+                  const SectionIcon = section.icon;
+                  const isActive = activeSection === section.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={section.id}
+                      style={[
+                        styles.sheetItem,
+                        isActive && styles.sheetItemActive,
+                      ]}
+                      onPress={() => {
+                        setActiveSection(section.id);
+                        setSheetOpen(false);
+                      }}
+                    >
+                      <SectionIcon
+                        size={18}
+                        color={isActive ? "#3b82f6" : "#6b7280"}
+                      />
+                      <Text
+                        style={[
+                          styles.sheetItemText,
+                          isActive && styles.sheetItemTextActive,
+                        ]}
+                      >
+                        {section.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </Animated.View>
+          </>
+        )}
       </View>
     </Modal>
   );
@@ -335,6 +706,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
   },
+  sectionsButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    marginRight: 12,
+  },
   headerInfo: {
     marginLeft: 12,
     flex: 1,
@@ -359,20 +736,47 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#f1f5f9",
   },
-  body: {
-    flex: 1,
-    flexDirection: "row",
+  backdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    zIndex: 50,
   },
-  sidebar: {
+  sheet: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    bottom: 0,
     backgroundColor: "white",
-    borderRightWidth: 1,
-    borderRightColor: "#e2e8f0",
+    zIndex: 51,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
-  sidebarScroll: {
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 20,
+    paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  sheetContent: {
     flex: 1,
     padding: 16,
   },
-  sidebarItem: {
+  sheetItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
@@ -380,16 +784,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 4,
   },
-  sidebarItemActive: {
+  sheetItemActive: {
     backgroundColor: "#eff6ff",
   },
-  sidebarItemText: {
+  sheetItemText: {
     marginLeft: 12,
     fontSize: 14,
     fontWeight: "500",
     color: "#6b7280",
   },
-  sidebarItemTextActive: {
+  sheetItemTextActive: {
     color: "#3b82f6",
   },
   content: {

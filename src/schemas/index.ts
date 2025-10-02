@@ -43,13 +43,15 @@ export const ReportSchema = z.object({
     "Assessment",
     "Lab Report",
     "Treatment",
-    "Discharge",
     "Follow-up",
+    "Discharge",
+    "Operation",
   ]),
   date: ISODateSchema,
   generatedBy: z.enum(["AI Assistant", "Manual Entry"]),
   status: z.enum(["Generated", "Reviewed", "Approved"]),
   content: z.object({
+    // Traditional report sections
     chiefComplaint: z.string().optional(),
     history: z.string().optional(),
     vitalsSummary: z.string().optional(),
@@ -58,6 +60,33 @@ export const ReportSchema = z.object({
     plan: z.string().optional(),
     notes: z.string().optional(),
     markdown: z.string().optional(),
+
+    // Discharge report template sections
+    diagnoses: z.string().optional(),
+    therapy: z.string().optional(),
+    histology: z.string().optional(),
+    course: z.string().optional(),
+    recommendations: z.string().optional(),
+    lastMedication: z.string().optional(),
+
+    // Operation report specific sections
+    surgeon: z.string().optional(),
+    assistants: z.string().optional(),
+    anesthesiologist: z.string().optional(),
+    anesthesia: z.string().optional(),
+    procedure: z.string().optional(),
+    operativeCourse: z.string().optional(),
+    surgicalDiagnosis: z.string().optional(),
+
+    // Additional structured fields
+    patientInfo: z
+      .object({
+        name: z.string().optional(),
+        dateOfBirth: z.string().optional(),
+        dateOfSurgery: z.string().optional(),
+        ward: z.string().optional(),
+      })
+      .optional(),
   }),
 });
 

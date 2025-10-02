@@ -399,6 +399,56 @@ export const mockReports: Report[] = [
   {
     id: "report-003",
     patientId: "patient-003",
+    title: "Hemorrhoidectomy Discharge Report",
+    type: "Discharge",
+    date: generateISODate(1),
+    generatedBy: "AI Assistant",
+    status: "Generated",
+    content: {
+      diagnoses: "Ventral Rectocele, Grade II Hemorrhoids",
+      therapy: "Stapled hemorrhoidopexy according to Longo on 11/17/2022",
+      histology: "Still pending.",
+      course:
+        "We kindly assume the patient's previous history is known. The patient presented as planned on 11/17/2022 for the aforementioned surgical procedure. After establishing the indication for surgery and setting the surgical date, preparation and informed consent were completed. On 11/17/2022, the patient was admitted for inpatient care and the above-mentioned procedure was performed.\n\nThe immediate postoperative course was uneventful. Vegetative functions returned in a timely manner. The patient received pain-adapted analgesic treatment. He received thrombosis prophylaxis with Clexane. We performed regular dressing changes and wound checks. The wound was unremarkable at all times during the stay.\n\nThe patient can be discharged home into the care of her general practitioner on 11/19/2022.",
+      recommendations:
+        "We recommend follow-up examinations and lab tests. Daily rinsing of the anal region several times, application of gauze pads. Analgesia with Novalgin 30 drops as needed up to four times daily. Movicol 1-0-0 for 2 days.\n\nWe have scheduled a follow-up appointment in our consultation hour for 11/24/2022 at 11:00 AM.",
+      lastMedication:
+        "The patient's home medications were continued without change by us. Oral anticoagulation therapy can be started after 1 week; until then, bridging with weight-adapted Clexane should be performed.",
+      markdown:
+        "# Hemorrhoidectomy Discharge Report\n\n## Diagnoses\nVentral Rectocele, Grade II Hemorrhoids\n\n## Therapy\nStapled hemorrhoidopexy according to Longo on 11/17/2022\n\n## Histology\nStill pending.\n\n## Course\nWe kindly assume the patient's previous history is known. The patient presented as planned on 11/17/2022 for the aforementioned surgical procedure...",
+    },
+  },
+  {
+    id: "report-004",
+    patientId: "patient-002",
+    title: "Laparoscopic Appendectomy Operation Report",
+    type: "Operation",
+    date: generateISODate(0.5),
+    generatedBy: "AI Assistant",
+    status: "Generated",
+    content: {
+      patientInfo: {
+        name: "Sarah Johnson",
+        dateOfBirth: "04/16/1980",
+        dateOfSurgery: "07/05/2023",
+        ward: "Station Aufnahme",
+      },
+      surgeon: "Dr. Ahmed Hosny",
+      assistants: "Dr. med. Lasha Makalatiya",
+      anesthesiologist: "Dr. Edzard Müller",
+      anesthesia: "General anesthesia with intubation",
+      surgicalDiagnosis:
+        "Acute Phlegmonous Appendicitis with Local Peritonitis",
+      procedure: "Laparoscopic Appendectomy",
+      operativeCourse:
+        "The operation is performed in the supine position under general anesthesia with intubation. Extensive skin disinfection and sterile draping. An approximately 1.5 cm long skin incision is made infraumbilically. The fascia is mobilized, and the umbilical pit is freely dissected. An open pneumoperitoneum is established up to 14 mmHg.\n\nA 12 mm trocar is inserted, and a 5 mm camera is introduced in the left lower abdomen. The initial intraoperative diagnosis is now made. It is immediately apparent that the patient has pronounced purulent-fibrinous exudate in the right lower abdomen and in the pouch of Douglas.\n\nThe appendix is visualized bimanually. It shows vascular injection with swelling of the apex and fibrin deposits, consistent with phlegmonous appendicitis with local peritonitis. The appendix is grasped in the middle and lifted towards the abdominal wall. The base is bluntly dissected using an Endo-Overholt.\n\nThe mesoappendix is dissected stepwise. The vessels are separately identified and clipped with Lapro-clips, then transected with scissors. After reaching the base of the appendix, which is free of inflammation, the appendix is stapled off with a 45 mm Endogia stapler. Finally, the appendix is removed from the abdomen through the 12 mm umbilical trocar.\n\nThe resection sites on the mesoappendix and the cecal pole are hemostatic after additional clipping. The abdomen is irrigated with 2 L of irrigation fluid. A 21-gauge Robinson drain is placed in the pouch of Douglas. The working trocars are removed under direct vision. The umbilical fascia is closed. The skin is closed with an absorbable intradermal suture.",
+      markdown:
+        "# Laparoscopic Appendectomy Operation Report\n\n## Patient Information\n- **Name:** Sarah Johnson\n- **Date of Birth:** 04/16/1980\n- **Date of Surgery:** 07/05/2023\n- **Ward:** Station Aufnahme\n\n## Surgical Team\n- **Surgeon:** Dr. Ahmed Hosny\n- **1st Assistant:** Dr. med. Lasha Makalatiya\n- **Anesthesiologist:** Dr. Edzard Müller\n\n## Surgical Diagnosis\nAcute Phlegmonous Appendicitis with Local Peritonitis\n\n## Anesthesia\nGeneral anesthesia with intubation\n\n## Procedure\nLaparoscopic Appendectomy\n\n## Operative Course\nThe operation is performed in the supine position under general anesthesia with intubation...",
+    },
+  },
+  {
+    id: "report-005",
+    patientId: "patient-003",
     title: "Diabetes Management Review",
     type: "Follow-up",
     date: generateISODate(2),

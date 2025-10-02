@@ -31,6 +31,27 @@ export class AIReportService {
     plan: string;
     notes: string;
     markdown: string;
+    // Discharge report template fields
+    diagnoses?: string;
+    therapy?: string;
+    histology?: string;
+    course?: string;
+    recommendations?: string;
+    lastMedication?: string;
+    // Operation report specific fields
+    surgeon?: string;
+    assistants?: string;
+    anesthesiologist?: string;
+    anesthesia?: string;
+    procedure?: string;
+    operativeCourse?: string;
+    surgicalDiagnosis?: string;
+    patientInfo?: {
+      name?: string;
+      dateOfBirth?: string;
+      dateOfSurgery?: string;
+      ward?: string;
+    };
   }> {
     console.log(
       "🤖 [AIReportService] Generating AI report content for patient:",
@@ -181,7 +202,7 @@ Emergency Contact: ${patient.emergencyContact || "Not provided"}`;
   }
 
   private getReportGenerationPrompt(reportType: string): string {
-    return `You are an expert medical AI assistant specializing in generating comprehensive medical reports. You will create detailed, professional medical reports based on patient data.
+    const basePrompt = `You are an expert medical AI assistant specializing in generating comprehensive medical reports. You will create detailed, professional medical reports based on patient data.
 
 ## REPORT TYPE: ${reportType}
 
@@ -190,9 +211,107 @@ Emergency Contact: ${patient.emergencyContact || "Not provided"}`;
 - Use proper medical terminology
 - Be thorough but concise
 - Follow standard medical report formats
-- Ensure all sections are complete and relevant
+- Ensure all sections are complete and relevant`;
 
-## REPORT SECTIONS TO GENERATE
+    // Return specific prompts based on report type
+    if (reportType === "Discharge") {
+      return `${basePrompt}
+
+## DISCHARGE REPORT STRUCTURE
+Follow this specific format for discharge reports:
+
+### DIAGNOSES
+- Primary diagnosis with ICD codes if applicable
+- Secondary diagnoses
+- Complications if any
+
+### THERAPY
+- Surgical procedures performed with dates
+- Medical treatments administered
+- Interventions and their outcomes
+
+### HISTOLOGY
+- Pathology results if available
+- Biopsy findings
+- Laboratory results relevant to diagnosis
+
+### COURSE
+- Detailed narrative of the patient's hospital stay
+- Timeline of events from admission to discharge
+- Patient's response to treatment
+- Postoperative course if applicable
+- Recovery milestones
+
+### RECOMMENDATIONS
+- Follow-up care instructions
+- Medication regimen
+- Activity restrictions
+- Wound care instructions
+- Follow-up appointments scheduled
+
+### LAST MEDICATION
+- Current medications at discharge
+- Dosage and frequency
+- Duration of treatment
+- Special instructions for medication management
+
+## FORMATTING REQUIREMENTS
+- Use clear, professional medical language
+- Include specific dates and measurements
+- Provide detailed course narrative
+- Ensure continuity of care information
+- Structure similar to hospital discharge summaries`;
+    } else if (reportType === "Operation") {
+      return `${basePrompt}
+
+## OPERATION REPORT STRUCTURE
+Follow this specific format for surgical operation reports:
+
+### PATIENT INFORMATION
+- Patient name, date of birth
+- Date of surgery
+- Ward/department
+
+### SURGICAL TEAM
+- Surgeon name and title
+- First assistant
+- Second assistant (if applicable)
+- Anesthesiologist
+- Nursing staff
+
+### SURGICAL DIAGNOSIS
+- Preoperative diagnosis
+- Postoperative diagnosis
+- ICD codes if applicable
+
+### ANESTHESIA
+- Type of anesthesia used
+- Anesthesia provider
+
+### PROCEDURE
+- Detailed name of surgical procedure
+- OPS codes if applicable
+
+### OPERATIVE COURSE
+- Detailed step-by-step description of the surgical procedure
+- Patient positioning
+- Surgical approach and technique
+- Findings during surgery
+- Complications if any
+- Closure technique
+- Postoperative status
+
+## FORMATTING REQUIREMENTS
+- Use precise surgical terminology
+- Include detailed procedural steps
+- Document all findings and complications
+- Ensure accurate team member documentation
+- Follow standard operative note format`;
+    } else {
+      // Default format for other report types
+      return `${basePrompt}
+
+## STANDARD REPORT SECTIONS
 
 ### CHIEF COMPLAINT
 - Primary reason for the visit/report
@@ -235,16 +354,8 @@ Emergency Contact: ${patient.emergencyContact || "Not provided"}`;
 - Include specific measurements and dates
 - Provide rationale for clinical decisions
 - Ensure continuity of care information
-- Maintain patient confidentiality standards
-
-## IMPORTANT GUIDELINES
-- Base all assessments on provided patient data
-- Do not make assumptions about missing information
-- Highlight any urgent or concerning findings
-- Provide actionable recommendations
-- Ensure report is suitable for medical record keeping
-
-Generate a comprehensive medical report following these guidelines.`;
+- Maintain patient confidentiality standards`;
+    }
   }
 
   private parseAIResponse(aiResponse: string): {
@@ -255,11 +366,30 @@ Generate a comprehensive medical report following these guidelines.`;
     plan: string;
     notes: string;
     markdown: string;
+    // Discharge report template fields
+    diagnoses?: string;
+    therapy?: string;
+    histology?: string;
+    course?: string;
+    recommendations?: string;
+    lastMedication?: string;
+    // Operation report specific fields
+    surgeon?: string;
+    assistants?: string;
+    anesthesiologist?: string;
+    anesthesia?: string;
+    procedure?: string;
+    operativeCourse?: string;
+    surgicalDiagnosis?: string;
+    patientInfo?: {
+      name?: string;
+      dateOfBirth?: string;
+      dateOfSurgery?: string;
+      ward?: string;
+    };
   } {
     // Parse the AI response into structured sections
-    // This is a simple parser - could be enhanced with more sophisticated parsing
-
-    const sections = {
+    const sections: any = {
       chiefComplaint: "",
       history: "",
       vitalsSummary: "",
@@ -273,7 +403,7 @@ Generate a comprehensive medical report following these guidelines.`;
     const extractSection = (text: string, sectionNames: string[]): string => {
       for (const sectionName of sectionNames) {
         const regex = new RegExp(
-          `(?:^|\\n)\\s*(?:##?\\s*)?${sectionName}[:\\s]*\\n([\\s\\S]*?)(?=\\n\\s*(?:##?\\s*)?(?:CHIEF|HISTORY|VITAL|ASSESSMENT|PLAN|NOTES|$))`,
+          `(?:^|\\n)\\s*(?:##?\\s*)?${sectionName}[:\\s]*\\n([\\s\\S]*?)(?=\\n\\s*(?:##?\\s*)?(?:CHIEF|HISTORY|VITAL|ASSESSMENT|PLAN|NOTES|DIAGNOSES|THERAPY|HISTOLOGY|COURSE|RECOMMENDATIONS|LAST MEDICATION|PATIENT INFORMATION|SURGICAL TEAM|SURGICAL DIAGNOSIS|ANESTHESIA|PROCEDURE|OPERATIVE COURSE|$))`,
           "i"
         );
         const match = text.match(regex);
@@ -284,6 +414,7 @@ Generate a comprehensive medical report following these guidelines.`;
       return "";
     };
 
+    // Standard report sections
     sections.chiefComplaint = extractSection(aiResponse, [
       "CHIEF COMPLAINT",
       "Chief Complaint",
@@ -314,8 +445,103 @@ Generate a comprehensive medical report following these guidelines.`;
       "Additional Notes",
     ]);
 
+    // Discharge report template sections
+    sections.diagnoses = extractSection(aiResponse, [
+      "DIAGNOSES",
+      "Diagnoses",
+      "DIAGNOSIS",
+      "Diagnosis",
+    ]);
+    sections.therapy = extractSection(aiResponse, [
+      "THERAPY",
+      "Therapy",
+      "TREATMENT",
+      "Treatment",
+    ]);
+    sections.histology = extractSection(aiResponse, [
+      "HISTOLOGY",
+      "Histology",
+      "PATHOLOGY",
+      "Pathology",
+    ]);
+    sections.course = extractSection(aiResponse, [
+      "COURSE",
+      "Course",
+      "CLINICAL COURSE",
+      "Clinical Course",
+    ]);
+    sections.recommendations = extractSection(aiResponse, [
+      "RECOMMENDATIONS",
+      "Recommendations",
+      "RECOMMENDATION",
+      "Recommendation",
+    ]);
+    sections.lastMedication = extractSection(aiResponse, [
+      "LAST MEDICATION",
+      "Last Medication",
+      "MEDICATION",
+      "Medication",
+    ]);
+
+    // Operation report specific sections
+    sections.surgeon = extractSection(aiResponse, ["SURGEON", "Surgeon"]);
+    sections.assistants = extractSection(aiResponse, [
+      "ASSISTANTS",
+      "Assistants",
+      "SURGICAL TEAM",
+    ]);
+    sections.anesthesiologist = extractSection(aiResponse, [
+      "ANESTHESIOLOGIST",
+      "Anesthesiologist",
+    ]);
+    sections.anesthesia = extractSection(aiResponse, [
+      "ANESTHESIA",
+      "Anesthesia",
+    ]);
+    sections.procedure = extractSection(aiResponse, ["PROCEDURE", "Procedure"]);
+    sections.operativeCourse = extractSection(aiResponse, [
+      "OPERATIVE COURSE",
+      "Operative Course",
+      "SURGICAL PROCEDURE",
+    ]);
+    sections.surgicalDiagnosis = extractSection(aiResponse, [
+      "SURGICAL DIAGNOSIS",
+      "Surgical Diagnosis",
+    ]);
+
+    // Extract patient information if present
+    const patientInfoText = extractSection(aiResponse, [
+      "PATIENT INFORMATION",
+      "Patient Information",
+    ]);
+    if (patientInfoText) {
+      sections.patientInfo = {
+        name: this.extractPatientDetail(patientInfoText, ["Name", "Patient"]),
+        dateOfBirth: this.extractPatientDetail(patientInfoText, [
+          "Date of Birth",
+          "DOB",
+          "Born",
+        ]),
+        dateOfSurgery: this.extractPatientDetail(patientInfoText, [
+          "Date of Surgery",
+          "Surgery Date",
+          "Operation Date",
+        ]),
+        ward: this.extractPatientDetail(patientInfoText, [
+          "Ward",
+          "Department",
+          "Unit",
+        ]),
+      };
+    }
+
     // If sections are empty, try to extract from a more general format
-    if (!sections.chiefComplaint && !sections.history && !sections.assessment) {
+    if (
+      !sections.chiefComplaint &&
+      !sections.history &&
+      !sections.assessment &&
+      !sections.diagnoses
+    ) {
       // Fallback: split by paragraphs and assign to sections
       const paragraphs = aiResponse.split("\n\n").filter((p) => p.trim());
       if (paragraphs.length >= 3) {
@@ -329,6 +555,17 @@ Generate a comprehensive medical report following these guidelines.`;
     }
 
     return sections;
+  }
+
+  private extractPatientDetail(text: string, labels: string[]): string {
+    for (const label of labels) {
+      const regex = new RegExp(`${label}[:\\s]+([^\\n]+)`, "i");
+      const match = text.match(regex);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+    return "";
   }
 }
 

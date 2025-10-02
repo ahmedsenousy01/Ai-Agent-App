@@ -401,7 +401,7 @@ export const createAITools = () => {
 
     generateAIReport: tool({
       description:
-        "Generate a comprehensive medical report using AI based on patient data, history, vitals, and medications",
+        "Generate a comprehensive medical report using AI based on patient data, history, vitals, and medications. Supports structured medical report templates for discharge and operation reports.",
       inputSchema: z.object({
         patientId: z.string().describe("The patient ID"),
         reportType: z
@@ -409,15 +409,18 @@ export const createAITools = () => {
             "Assessment",
             "Lab Report",
             "Treatment",
-            "Discharge",
             "Follow-up",
+            "Discharge",
+            "Operation",
           ])
-          .describe("Type of report to generate"),
+          .describe(
+            "Type of report to generate. Use 'Discharge' for hospital discharge summaries or 'Operation' for surgical procedure reports."
+          ),
         additionalContext: z
           .string()
           .optional()
           .describe(
-            "Additional context or specific focus for the report (e.g., 'focus on cardiac symptoms', 'post-surgery follow-up')"
+            "Additional context or specific focus for the report (e.g., 'focus on cardiac symptoms', 'post-surgery follow-up', 'hemorrhoidectomy procedure', 'appendectomy with complications')"
           ),
       }),
       execute: async ({ patientId, reportType, additionalContext }) => {
@@ -440,8 +443,9 @@ export const createAITools = () => {
             "Assessment",
             "Lab Report",
             "Treatment",
-            "Discharge",
             "Follow-up",
+            "Discharge",
+            "Operation",
           ])
           .optional()
           .describe("Report type"),

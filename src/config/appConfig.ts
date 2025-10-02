@@ -14,9 +14,7 @@ export const appConfig = {
 
   // AI settings
   ai: {
-    maxProcessingTime: 30000, // 30 seconds
     maxToolCalls: 5,
-    timeoutMs: 10000, // 10 seconds
   },
 
   // UI settings
